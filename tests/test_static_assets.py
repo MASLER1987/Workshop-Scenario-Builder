@@ -15,8 +15,8 @@ class StaticAssetTests(unittest.TestCase):
     def test_podium_cache_busts_assets(self):
         html = (ROOT / "static" / "podium.html").read_text()
 
-        self.assertIn('/static/style.css?v=score-03', html)
-        self.assertIn('/static/podium.js?v=score-03', html)
+        self.assertIn('/static/style.css?v=score-04', html)
+        self.assertIn('/static/podium.js?v=score-04', html)
 
     def test_participant_stream_loop_yields_to_browser_paint(self):
         script = (ROOT / "static" / "app.js").read_text()
@@ -37,7 +37,7 @@ class StaticAssetTests(unittest.TestCase):
         script = (ROOT / "static" / "podium.js").read_text()
 
         self.assertIn("best_captured", script)
-        self.assertIn("best_overall", script)
+        self.assertIn("best_rubric", script)
         self.assertIn("scorePanel(run?.score)", script)
 
 

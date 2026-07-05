@@ -161,16 +161,57 @@ async def run(sid: uuid.UUID, body: RunIn):
 async def rerun(sid: uuid.UUID):
     return _streaming_response(await _prepare_run(sid, None))
 
+async def _podium_session_rows():
+    return await db.fetch("""SELECT s.id,s.display_name,s.last_active_at,
+        coalesce((SELECT max(i.version_number) FROM instructions i WHERE i.session_id=s.id),0) latest_version_number,
+        (SELECT count(*) FROM runs r WHERE r.session_id=s.id) run_count,
+        coalesce((SELECT max((r.score->>'captured')::int) FROM runs r WHERE r.session_id=s.id AND r.score IS NOT NULL),0) best_captured,
+        coalesce((SELECT max((r.score->>'total')::int) FROM runs r WHERE r.session_id=s.id AND r.score IS NOT NULL),0) objectives_total,
+        coalesce((SELECT max((r.score->>'overall')::int) FROM runs r WHERE r.session_id=s.id AND r.score IS NOT NULL),0) best_rubric,
+        coalesce((SELECT (r.score->>'captured')::int FROM runs r WHERE r.session_id=s.id AND r.score IS NOT NULL ORDER BY r.created_at DESC LIMIT 1),0) latest_captured,
+        coalesce((SELECT json_agg((r.score->>'captured')::int ORDER BY r.created_at) FROM runs r WHERE r.session_id=s.id AND r.score IS NOT NULL),'[]'::json) trend
+        FROM sessions s
+        ORDER BY best_captured DESC, best_rubric DESC, s.last_active_at DESC""")
+
 @app.get("/api/podium/sessions")
 async def podium_sessions(key: str = Query(...)):
     podium_auth(key)
-    rows = await db.fetch("""SELECT s.id,s.display_name,s.last_active_at, coalesce(max(i.version_number),0) latest_version_number, count(r.id) run_count,
-        coalesce(max((r.score->>'captured')::int),0) best_captured,
-        coalesce(max((r.score->>'total')::int),0) best_total,
-        coalesce(max((r.score->>'overall')::int),0) best_overall
-        FROM sessions s LEFT JOIN instructions i ON i.session_id=s.id LEFT JOIN runs r ON r.session_id=s.id
-        GROUP BY s.id ORDER BY best_captured DESC, best_overall DESC, s.last_active_at DESC""")
+    rows = await _podium_session_rows()
     return [dict(r) for r in rows]
+
+@app.get("/api/podium/summary")
+async def podium_summary(key: str = Query(...)):
+    podium_auth(key)
+    rows = [dict(r) for r in await _podium_session_rows()]
+    session_count = len(rows)
+    total_runs = sum(int(r["run_count"]) for r in rows)
+    latest_scores = [int(r["latest_captured"]) for r in rows]
+    class_average = round(sum(latest_scores) / session_count, 1) if session_count else 0
+    max_total = max([int(r["objectives_total"]) for r in rows] + [5])
+    distribution = {str(i): 0 for i in range(max_total + 1)}
+    for score in latest_scores:
+        distribution[str(score)] = distribution.get(str(score), 0) + 1
+    improved = []
+    for row in rows:
+        trend = row.get("trend") or []
+        if trend:
+            first = int(trend[0])
+            peak = max(int(v) for v in trend)
+            improved.append({
+                "id": str(row["id"]),
+                "display_name": row["display_name"],
+                "improvement": peak - first,
+                "first_captured": first,
+                "max_captured": peak,
+            })
+    improved.sort(key=lambda item: (item["improvement"], item["max_captured"]), reverse=True)
+    return {
+        "session_count": session_count,
+        "total_runs": total_runs,
+        "class_average_latest_captured": class_average,
+        "distribution": distribution,
+        "most_improved": improved[:3],
+    }
 
 @app.get("/api/podium/sessions/{sid}")
 async def podium_session(sid: uuid.UUID, key: str = Query(...)):
@@ -178,7 +219,15 @@ async def podium_session(sid: uuid.UUID, key: str = Query(...)):
     latest = await db.fetchrow("SELECT * FROM instructions WHERE session_id=$1 ORDER BY version_number DESC LIMIT 1", sid)
     run = await db.fetchrow("SELECT r.*, i.text instruction_text, i.version_number FROM runs r LEFT JOIN instructions i ON i.id=r.instruction_id WHERE r.session_id=$1 ORDER BY r.created_at DESC LIMIT 1", sid)
     hist = await db.fetch("SELECT r.id, r.created_at, i.version_number, i.text instruction_text, r.transcript, r.ended_reason, r.score FROM runs r LEFT JOIN instructions i ON i.id=r.instruction_id WHERE r.session_id=$1 ORDER BY r.created_at", sid)
-    return {"latest_instruction": rowdict(latest), "latest_run": rowdict(run), "run_history": [dict(r) for r in hist]}
+    history = []
+    for row in hist:
+        item = dict(row)
+        score = item.get("score") or {}
+        item["captured"] = score.get("captured")
+        item["overall"] = score.get("overall")
+        item["tip"] = score.get("tip")
+        history.append(item)
+    return {"latest_instruction": rowdict(latest), "latest_run": rowdict(run), "run_history": history}
 
 @app.get("/api/podium/scenarios")
 async def scenarios(key: str = Query(...)):
