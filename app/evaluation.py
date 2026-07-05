@@ -1,26 +1,16 @@
 import asyncio
 import json
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
+from .seed import SCENARIOS
 from .simulation import _call_with_retry
 
-OBJECTIVES: dict[str, list[dict[str, str]]] = {
-    "11111111-1111-1111-1111-111111111111": [
-        {"id": "people", "label": "Who is involved"},
-        {"id": "will", "label": "Whether there is a will or estate document"},
-        {"id": "urgency", "label": "Whether the house sale is urgent"},
-        {"id": "capacity_pressure", "label": "Capacity, dementia, or pressure concerns"},
-        {"id": "next_steps", "label": "Clear next step for human follow-up"},
-    ],
-    "22222222-2222-2222-2222-222222222222": [
-        {"id": "timeline", "label": "What happened and when"},
-        {"id": "written_notice", "label": "Whether anything is in writing"},
-        {"id": "service_length", "label": "Length of service"},
-        {"id": "retaliation", "label": "Possible retaliation or protected complaint"},
-        {"id": "next_steps", "label": "Clear next step and urgency"},
-    ],
+SEEDED_OBJECTIVES: dict[str, list[dict[str, str]]] = {
+    scenario["id"]: scenario["objectives"]
+    for scenario in SCENARIOS
+    if scenario.get("objectives")
 }
 
 DEFAULT_OBJECTIVES = [
@@ -62,9 +52,35 @@ def build_judge_system() -> str:
     return JUDGE_SYSTEM
 
 
-def objectives_for_scenario(scenario_id: str | uuid.UUID | None) -> list[dict[str, str]]:
-    key = str(scenario_id) if scenario_id else ""
-    return OBJECTIVES.get(key, DEFAULT_OBJECTIVES)
+def _clean_objectives(raw: Any) -> list[dict[str, str]]:
+    if not isinstance(raw, list):
+        return []
+    objectives = []
+    for item in raw:
+        if not isinstance(item, Mapping):
+            continue
+        oid = str(item.get("id", "")).strip()
+        label = str(item.get("label", "")).strip()
+        if oid and label:
+            objectives.append({"id": oid, "label": label})
+    return objectives
+
+
+def objectives_for_scenario(scenario: str | uuid.UUID | Mapping[str, Any] | None) -> list[dict[str, str]]:
+    if isinstance(scenario, Mapping):
+        objectives = _clean_objectives(scenario.get("objectives"))
+        if objectives:
+            return objectives
+        key = str(scenario.get("id", ""))
+    else:
+        key = str(scenario) if scenario else ""
+    return [dict(item) for item in SEEDED_OBJECTIVES.get(key, DEFAULT_OBJECTIVES)]
+
+
+def _public_brief_for_scenario(scenario: Mapping[str, Any] | None) -> str:
+    if not scenario:
+        return ""
+    return " ".join(str(scenario.get("public_brief", "")).split())
 
 
 def _clamp_score(value: Any) -> int:
@@ -129,23 +145,26 @@ def parse_judge_response(text: str) -> dict[str, Any]:
     return raw
 
 
-def _transcript_payload(transcript: list[dict[str, str]], objectives: list[dict[str, str]]) -> str:
+def _transcript_payload(transcript: list[dict[str, str]], objectives: list[dict[str, str]], public_brief: str = "") -> str:
     conversation = "\n".join(
         f"{'CLIENT' if item['role'] == 'client' else 'BOT'}: {item['text']}"
         for item in transcript
     )
     objective_lines = "\n".join(f"- {item['id']}: {item['label']}" for item in objectives)
-    return f"OBJECTIVES:\n{objective_lines}\n\nTRANSCRIPT:\n{conversation}"
+    brief = f"PUBLIC CLIENT BRIEF:\n{public_brief}\n\n" if public_brief else ""
+    return f"{brief}OBJECTIVES:\n{objective_lines}\n\nTRANSCRIPT:\n{conversation}"
 
 
 async def evaluate_transcript(
     *,
     transcript: list[dict[str, str]],
-    scenario_id: str | uuid.UUID | None,
+    scenario_id: str | uuid.UUID | None = None,
+    scenario: Mapping[str, Any] | None = None,
     call_text: CallText = _call_with_retry,
 ) -> dict[str, Any]:
-    objectives = objectives_for_scenario(scenario_id)
-    payload = _transcript_payload(transcript, objectives)
+    scenario_ref = scenario if scenario is not None else scenario_id
+    objectives = objectives_for_scenario(scenario_ref)
+    payload = _transcript_payload(transcript, objectives, _public_brief_for_scenario(scenario))
     last_error: Exception | None = None
     for _ in range(2):
         try:

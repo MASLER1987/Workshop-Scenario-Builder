@@ -46,6 +46,7 @@ async def init_db() -> None:
           public_brief TEXT NOT NULL,
           opening_message TEXT NOT NULL,
           hidden_brief TEXT NOT NULL,
+          objectives JSONB,
           is_active BOOLEAN DEFAULT false
         );
         CREATE TABLE IF NOT EXISTS instructions (
@@ -68,11 +69,18 @@ async def init_db() -> None:
         CREATE UNIQUE INDEX IF NOT EXISTS one_active_scenario ON scenarios ((is_active)) WHERE is_active;
         """)
         await con.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS score JSONB")
+        await con.execute("ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS objectives JSONB")
         count = await con.fetchval("SELECT count(*) FROM scenarios")
         if count == 0:
             for s in SCENARIOS:
-                await con.execute("""INSERT INTO scenarios (id,title,public_brief,opening_message,hidden_brief,is_active)
-                    VALUES ($1,$2,$3,$4,$5,$6)""", uuid.UUID(s["id"]), s["title"], s["public_brief"], s["opening_message"], s["hidden_brief"], s["is_active"])
+                await con.execute("""INSERT INTO scenarios (id,title,public_brief,opening_message,hidden_brief,objectives,is_active)
+                    VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)""", uuid.UUID(s["id"]), s["title"], s["public_brief"], s["opening_message"], s["hidden_brief"], s["objectives"], s["is_active"])
+        for s in SCENARIOS:
+            await con.execute(
+                "UPDATE scenarios SET objectives=$2::jsonb WHERE id=$1",
+                uuid.UUID(s["id"]),
+                s["objectives"],
+            )
 
 async def fetchrow(q: str, *args: Any):
     return await (await pool()).fetchrow(q, *args)

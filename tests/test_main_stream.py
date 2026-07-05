@@ -16,7 +16,7 @@ class MainStreamingTests(unittest.TestCase):
             yield {"type": "message_end"}
             yield {"type": "_result", "transcript": transcript, "ended_reason": "max_turns"}
 
-        async def fake_evaluate(*, transcript, scenario_id):
+        async def fake_evaluate(*, transcript, scenario):
             return {
                 "captured": 1,
                 "total": 5,
@@ -90,7 +90,7 @@ class MainStreamingTests(unittest.TestCase):
             finally:
                 active_runs -= 1
 
-        async def fake_evaluate(*, transcript, scenario_id):
+        async def fake_evaluate(*, transcript, scenario):
             return {
                 "captured": 0,
                 "total": 5,

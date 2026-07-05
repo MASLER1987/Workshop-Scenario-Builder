@@ -141,7 +141,7 @@ async def _stream_prepared_run(prepared: dict):
                 if event["type"] == "_result":
                     ended_reason = event["ended_reason"]
                     if transcript and ended_reason != "error":
-                        score = await evaluate_transcript(transcript=transcript, scenario_id=prepared["scenario"]["id"])
+                        score = await evaluate_transcript(transcript=transcript, scenario=prepared["scenario"])
                         yield ndjson({"type": "score", **score})
                     await _persist_run(prepared, transcript, ended_reason, score)
                     persisted = True
