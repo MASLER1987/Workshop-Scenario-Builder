@@ -41,7 +41,7 @@ function sortedSessions() {
 
 function renderGrid() {
   detail = null;
-  app.innerHTML = `<header><h1>Prompt Playground Podium</h1><select id="scen">${scenarios.map((s) => `<option value="${s.id}" ${s.is_active ? "selected" : ""}>${esc(s.title)}</option>`).join("")}</select><button class="btn secondary" id="reset">Reset</button></header>${summaryStrip()}<div class="sortbar"><button class="btn ${sortMode === "leaderboard" ? "primary" : "secondary"}" data-sort="leaderboard">Leaderboard</button><button class="btn ${sortMode === "improved" ? "primary" : "secondary"}" data-sort="improved">Most improved</button></div><section class="grid">${sortedSessions().map(card).join("")}</section>`;
+  app.innerHTML = `<div class="podium-shell"><header class="podium-header"><div class="podium-title"><h1>Prompt Playground Podium</h1><p>${sessions.length} participants live</p></div><div class="podium-actions"><select id="scen">${scenarios.map((s) => `<option value="${s.id}" ${s.is_active ? "selected" : ""}>${esc(s.title)}</option>`).join("")}</select><button class="btn secondary" id="reset">Reset</button></div></header>${summaryStrip()}<div class="sortbar"><button class="btn ${sortMode === "leaderboard" ? "primary" : "secondary"}" data-sort="leaderboard">Leaderboard</button><button class="btn ${sortMode === "improved" ? "primary" : "secondary"}" data-sort="improved">Most improved</button></div><section class="grid">${sortedSessions().map(card).join("")}</section></div>`;
   document.querySelectorAll(".card").forEach((c) => (c.onclick = () => openDetail(c.dataset.id)));
   document.querySelectorAll("[data-sort]").forEach((b) => (b.onclick = () => {
     sortMode = b.dataset.sort;
@@ -75,7 +75,7 @@ function renderDetail(runId) {
   const run = runId ? d.run_history.find((r) => r.id === runId) : d.latest_run;
   const instruction = run?.instruction_text || d.latest_instruction?.text || "No instruction yet";
   const transcript = run?.transcript || [];
-  app.innerHTML = `<button class="btn secondary" id="back">Back</button>${progressionHeader(d.run_history)}<div class="detail"><section class="pane"><h2>Instruction <span class="badge">v${run?.version_number || d.latest_instruction?.version_number || "new"}</span></h2><div class="instruction">${esc(instruction)}</div><div class="history">${d.run_history.map((r) => `<button class="btn secondary ${run?.id === r.id ? "selected" : ""}" data-run="${r.id}">v${r.version_number} ${scoreText(r)}</button>`).join("")}</div></section><section class="pane"><h2>Conversation</h2><div class="chat">${chat(transcript)}</div>${scorePanel(run?.score)}</section></div>`;
+  app.innerHTML = `<div class="podium-shell detail-shell"><header class="podium-header detail-header"><button class="btn secondary" id="back">Back</button>${progressionHeader(d.run_history)}</header><div class="detail"><section class="pane"><h2>Instruction <span class="badge">v${run?.version_number || d.latest_instruction?.version_number || "new"}</span></h2><div class="instruction">${esc(instruction)}</div><div class="history">${d.run_history.map((r) => `<button class="btn secondary ${run?.id === r.id ? "selected" : ""}" data-run="${r.id}">v${r.version_number} ${scoreText(r)}</button>`).join("")}</div></section><section class="pane"><h2>Conversation</h2><div class="chat">${chat(transcript)}</div>${scorePanel(run?.score)}</section></div></div>`;
   document.querySelector("#back").onclick = load;
   document.querySelectorAll("[data-run]").forEach((b) => (b.onclick = () => renderDetail(b.dataset.run)));
 }

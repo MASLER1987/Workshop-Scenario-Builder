@@ -21,6 +21,9 @@ class PodiumProgressionTests(unittest.TestCase):
 
         self.assertIn("summary", source)
         self.assertIn("sortMode", source)
+        self.assertIn("podium-shell", source)
+        self.assertIn("podium-header", source)
+        self.assertIn("podium-actions", source)
         self.assertIn("Leaderboard", source)
         self.assertIn("Most improved", source)
         self.assertIn("progressionStrip", source)
@@ -33,3 +36,13 @@ class PodiumProgressionTests(unittest.TestCase):
         self.assertIn("score-low", source)
         self.assertIn("score-mid", source)
         self.assertIn("score-high", source)
+
+    def test_podium_css_has_desktop_and_responsive_layouts(self):
+        source = (ROOT / "static" / "style.css").read_text()
+
+        self.assertIn(".podium-shell", source)
+        self.assertIn("max-width:1760px", source)
+        self.assertIn("grid-template-columns:repeat(auto-fit,minmax(300px,1fr))", source)
+        self.assertIn("grid-template-columns:minmax(360px,.9fr) minmax(560px,1.1fr)", source)
+        self.assertIn("@media(max-width:1100px)", source)
+        self.assertIn("@media(min-width:1500px)", source)
