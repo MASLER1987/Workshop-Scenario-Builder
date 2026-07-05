@@ -142,6 +142,9 @@ function handleStreamEvent(event) {
     const msg = state.run.transcript[state.run.transcript.length - 1];
     if (msg) msg.streaming = false;
     state.notice = event.detail || "connection lost - partial conversation shown";
+  } else if (event.type === "score") {
+    const { type, ...score } = event;
+    state.run.score = score;
   } else if (event.type === "done") {
     state.run.run_id = event.run_id;
     state.run.ended_reason = event.ended_reason;
@@ -162,7 +165,7 @@ function renderTranscript() {
       : state.run.ended_reason === "error"
         ? "ended with an error"
         : "reached turn limit";
-  app.innerHTML = `<div class="top"><h2>Test - v${state.run.version_number || state.version || "new"}</h2><span class="tag">${reason}</span></div>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}<div class="chat">${chat(state.run.transcript)}</div><div class="bar"><button class="btn primary" id="edit" ${state.streaming ? "disabled" : ""}>Edit instruction</button><button class="btn secondary" id="again" ${state.streaming ? "disabled" : ""}>Run again</button></div>`;
+  app.innerHTML = `<div class="top"><h2>Test - v${state.run.version_number || state.version || "new"}</h2><span class="tag">${reason}</span></div>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}<div class="chat">${chat(state.run.transcript)}</div>${scorePanel(state.run.score)}<div class="bar"><button class="btn primary" id="edit" ${state.streaming ? "disabled" : ""}>Edit instruction</button><button class="btn secondary" id="again" ${state.streaming ? "disabled" : ""}>Run again</button></div>`;
   $("#edit").onclick = () => {
     if (state.streaming) return;
     state.mode = "editor";
@@ -189,6 +192,22 @@ function chat(t) {
     seen[m.role] = true;
     return `<div class="msg ${m.role === "bot" ? "bot" : "client"}" data-message="${index}">${label}<span>${esc(m.text)}</span>${m.streaming ? '<span class="typing">...</span>' : ""}</div>`;
   }).join("");
+}
+
+function scorePanel(score) {
+  if (!score) return state.streaming ? '<section class="score-panel"><p class="muted">Scoring your bot...</p></section>' : "";
+  const results = (score.results || []).map((item) => `<li class="${item.captured ? "yes" : "no"}"><span>${item.captured ? "yes" : "no"}</span><div><strong>${esc(item.label || item.id)}</strong>${item.evidence ? `<small>${esc(item.evidence)}</small>` : ""}</div></li>`).join("");
+  const skills = ["tone", "questions", "clarity", "honesty"].map((key) => skillRow(labelFor(key), score.rubric?.[key] || 0)).join("");
+  return `<section class="score-panel"><h3>Info captured: ${score.captured} / ${score.total}</h3><ul class="objectives">${results}</ul><h3>Bot skills</h3><div class="skills">${skills}</div><div class="tip"><strong>Tip</strong><p>${esc(score.tip || "")}</p></div></section>`;
+}
+
+function skillRow(label, value) {
+  const score = Math.max(0, Math.min(5, Number(value) || 0));
+  return `<div class="skill"><span>${label}</span><div class="dots">${Array.from({ length: 5 }, (_, i) => `<i class="${i < score ? "on" : ""}"></i>`).join("")}</div><b>${score}/5</b></div>`;
+}
+
+function labelFor(key) {
+  return { tone: "Tone", questions: "Questions", clarity: "Clarity", honesty: "Honesty" }[key] || key;
 }
 
 function esc(s = "") {

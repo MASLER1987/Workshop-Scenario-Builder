@@ -67,6 +67,7 @@ async def init_db() -> None:
         );
         CREATE UNIQUE INDEX IF NOT EXISTS one_active_scenario ON scenarios ((is_active)) WHERE is_active;
         """)
+        await con.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS score JSONB")
         count = await con.fetchval("SELECT count(*) FROM scenarios")
         if count == 0:
             for s in SCENARIOS:

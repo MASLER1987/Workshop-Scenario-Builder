@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import db
+from .evaluation import evaluate_transcript
 from .simulation import ndjson, stream_simulation_events
 
 locks: set[str] = set()
@@ -95,21 +96,23 @@ async def _prepare_run(sid: uuid.UUID, instruction_text: str | None):
         locks.discard(key)
         raise
 
-async def _persist_run(prepared: dict, transcript: list[dict[str, str]], ended_reason: str):
+async def _persist_run(prepared: dict, transcript: list[dict[str, str]], ended_reason: str, score: dict | None = None):
     await db.execute(
-        "INSERT INTO runs (id,session_id,instruction_id,scenario_id,transcript,ended_reason) VALUES ($1,$2,$3,$4,$5::jsonb,$6)",
+        "INSERT INTO runs (id,session_id,instruction_id,scenario_id,transcript,ended_reason,score) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7::jsonb)",
         prepared["run_id"],
         prepared["session_id"],
         prepared["instruction"]["id"],
         prepared["scenario"]["id"],
         transcript,
         ended_reason,
+        score,
     )
     await db.execute("UPDATE sessions SET last_active_at=now() WHERE id=$1", prepared["session_id"])
 
 async def _stream_prepared_run(prepared: dict):
     transcript: list[dict[str, str]] = []
     ended_reason = "error"
+    score = None
     persisted = False
     try:
         yield ndjson({"type": "run_start", "version_number": prepared["instruction"]["version_number"]})
@@ -121,19 +124,23 @@ async def _stream_prepared_run(prepared: dict):
             ):
                 if event["type"] == "_result":
                     ended_reason = event["ended_reason"]
-                    await _persist_run(prepared, transcript, ended_reason)
+                    if transcript and ended_reason != "error":
+                        score = await evaluate_transcript(transcript=transcript, scenario_id=prepared["scenario"]["id"])
+                        yield ndjson({"type": "score", **score})
+                    await _persist_run(prepared, transcript, ended_reason, score)
                     persisted = True
                     yield ndjson({"type": "done", "run_id": str(prepared["run_id"]), "ended_reason": ended_reason})
                 else:
                     yield ndjson(event)
     except asyncio.CancelledError:
         if not persisted:
-            await asyncio.shield(_persist_run(prepared, transcript, ended_reason))
+            await asyncio.shield(_persist_run(prepared, transcript, ended_reason, score))
         raise
     except Exception as exc:
         if not persisted:
+            ended_reason = "error"
             yield ndjson({"type": "error", "detail": str(exc) or "Simulation failed"})
-            await _persist_run(prepared, transcript, ended_reason)
+            await _persist_run(prepared, transcript, ended_reason, score)
             persisted = True
             yield ndjson({"type": "done", "run_id": str(prepared["run_id"]), "ended_reason": ended_reason})
     finally:
@@ -157,9 +164,12 @@ async def rerun(sid: uuid.UUID):
 @app.get("/api/podium/sessions")
 async def podium_sessions(key: str = Query(...)):
     podium_auth(key)
-    rows = await db.fetch("""SELECT s.id,s.display_name,s.last_active_at, coalesce(max(i.version_number),0) latest_version_number, count(r.id) run_count
+    rows = await db.fetch("""SELECT s.id,s.display_name,s.last_active_at, coalesce(max(i.version_number),0) latest_version_number, count(r.id) run_count,
+        coalesce(max((r.score->>'captured')::int),0) best_captured,
+        coalesce(max((r.score->>'total')::int),0) best_total,
+        coalesce(max((r.score->>'overall')::int),0) best_overall
         FROM sessions s LEFT JOIN instructions i ON i.session_id=s.id LEFT JOIN runs r ON r.session_id=s.id
-        GROUP BY s.id ORDER BY s.last_active_at DESC""")
+        GROUP BY s.id ORDER BY best_captured DESC, best_overall DESC, s.last_active_at DESC""")
     return [dict(r) for r in rows]
 
 @app.get("/api/podium/sessions/{sid}")
@@ -167,7 +177,7 @@ async def podium_session(sid: uuid.UUID, key: str = Query(...)):
     podium_auth(key)
     latest = await db.fetchrow("SELECT * FROM instructions WHERE session_id=$1 ORDER BY version_number DESC LIMIT 1", sid)
     run = await db.fetchrow("SELECT r.*, i.text instruction_text, i.version_number FROM runs r LEFT JOIN instructions i ON i.id=r.instruction_id WHERE r.session_id=$1 ORDER BY r.created_at DESC LIMIT 1", sid)
-    hist = await db.fetch("SELECT r.id, r.created_at, i.version_number, i.text instruction_text, r.transcript, r.ended_reason FROM runs r LEFT JOIN instructions i ON i.id=r.instruction_id WHERE r.session_id=$1 ORDER BY r.created_at", sid)
+    hist = await db.fetch("SELECT r.id, r.created_at, i.version_number, i.text instruction_text, r.transcript, r.ended_reason, r.score FROM runs r LEFT JOIN instructions i ON i.id=r.instruction_id WHERE r.session_id=$1 ORDER BY r.created_at", sid)
     return {"latest_instruction": rowdict(latest), "latest_run": rowdict(run), "run_history": [dict(r) for r in hist]}
 
 @app.get("/api/podium/scenarios")
