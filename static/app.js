@@ -138,6 +138,8 @@ function handleStreamEvent(event) {
   } else if (event.type === "message_end") {
     const msg = state.run.transcript[state.run.transcript.length - 1];
     if (msg) msg.streaming = false;
+  } else if (event.type === "status") {
+    state.notice = event.text || "";
   } else if (event.type === "error") {
     const msg = state.run.transcript[state.run.transcript.length - 1];
     if (msg) msg.streaming = false;

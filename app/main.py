@@ -13,6 +13,17 @@ from .evaluation import evaluate_transcript
 from .simulation import ndjson, stream_simulation_events
 
 locks: set[str] = set()
+WAITING_FOR_SLOT = "Waiting for a slot..."
+
+
+def _max_active_runs() -> int:
+    try:
+        return max(1, int(os.environ.get("MAX_ACTIVE_RUNS", "10")))
+    except ValueError:
+        return 10
+
+
+_llm_slots = asyncio.Semaphore(_max_active_runs())
 
 class SessionIn(BaseModel):
     display_name: str = Field(min_length=1, max_length=40)
@@ -114,8 +125,13 @@ async def _stream_prepared_run(prepared: dict):
     ended_reason = "error"
     score = None
     persisted = False
+    acquired_slot = False
     try:
         yield ndjson({"type": "run_start", "version_number": prepared["instruction"]["version_number"]})
+        if _llm_slots.locked():
+            yield ndjson({"type": "status", "text": WAITING_FOR_SLOT})
+        await _llm_slots.acquire()
+        acquired_slot = True
         async with asyncio.timeout(90):
             async for event in stream_simulation_events(
                 prepared["instruction"]["text"],
@@ -133,7 +149,7 @@ async def _stream_prepared_run(prepared: dict):
                 else:
                     yield ndjson(event)
     except asyncio.CancelledError:
-        if not persisted:
+        if not persisted and (acquired_slot or transcript):
             await asyncio.shield(_persist_run(prepared, transcript, ended_reason, score))
         raise
     except Exception as exc:
@@ -144,6 +160,8 @@ async def _stream_prepared_run(prepared: dict):
             persisted = True
             yield ndjson({"type": "done", "run_id": str(prepared["run_id"]), "ended_reason": ended_reason})
     finally:
+        if acquired_slot:
+            _llm_slots.release()
         locks.discard(str(prepared["session_id"]))
 
 def _streaming_response(prepared: dict):

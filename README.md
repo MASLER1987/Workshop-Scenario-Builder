@@ -17,6 +17,7 @@ A single FastAPI service for live workshops where participants write intake chat
 | `ANTHROPIC_API_KEY` | Anthropic API key |
 | `PODIUM_KEY` | Shared secret for `/podium?key=...` and podium API routes |
 | `ACTIVE_SCENARIO_ID` | Optional active scenario override |
+| `MAX_ACTIVE_RUNS` | Optional global LLM run cap per service instance; defaults to `10` |
 
 ## Run locally
 
