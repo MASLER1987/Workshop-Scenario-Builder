@@ -7,10 +7,10 @@ from typing import Any
 from .seed import SCENARIOS
 from .simulation import _call_with_retry
 
-SEEDED_OBJECTIVES: dict[str, list[dict[str, str]]] = {
-    scenario["id"]: scenario["objectives"]
+SEEDED_SCORECARDS: dict[str, dict[str, Any]] = {
+    scenario["id"]: scenario["scorecard"]
     for scenario in SCENARIOS
-    if scenario.get("objectives")
+    if scenario.get("scorecard")
 }
 
 DEFAULT_OBJECTIVES = [
@@ -23,15 +23,15 @@ DEFAULT_OBJECTIVES = [
 
 RUBRIC_KEYS = ("tone", "questions", "clarity", "honesty")
 
-JUDGE_SYSTEM = """You are evaluating a chatbot transcript for a school workshop where students write the bot's instructions. You will receive a conversation between a CLIENT and a BOT, plus a list of information objectives.
+JUDGE_SYSTEM = """You are evaluating a chatbot transcript for a school workshop where students write the bot's instructions. You will receive a conversation between a CLIENT and a BOT, plus a hidden scorecard.
 
-PART 1 - OBJECTIVES. For each objective, decide if the bot genuinely achieved it: the information must appear because the bot asked for it or the client volunteered it in response to the bot, OR (for next-steps objectives) the bot clearly told the client what happens next. Information only present in the client's first message counts solely if the bot acknowledged or built on it.
+PART 1 - OBJECTIVES. For each scorecard objective, decide if the bot genuinely achieved it: the information must appear because the bot asked for it or the client volunteered it in response to the bot, OR (for next-steps objectives) the bot clearly told the client what happens next. Information only present in the client's first message counts solely if the bot acknowledged or built on it. Score only the listed scorecard objectives; do not invent extra scenario-specific requirements.
 
 PART 2 - RUBRIC. Score the BOT 1-5 on each dimension (1 = poor, 3 = okay, 5 = excellent):
 - tone: warm, human, and appropriate vs cold, robotic, or over-the-top
 - questions: one clear, relevant question at a time vs no questions, vague questions, or several stacked at once
 - clarity: short, plain messages vs walls of text or jargon
-- honesty: manages expectations well - clear about what happens next, does not pretend to give legal advice or make promises it can't keep
+- honesty: manages expectations well - clear about what happens next, does not pretend to give legal advice or make promises it can't keep. Treat the scorecard "avoid" items as examples of poor honesty.
 
 PART 3 - COACHING TIP. One specific, actionable sentence telling the student the single best change to make to their INSTRUCTIONS next (not to the bot's individual messages). Encouraging in tone; suitable for a 14-15 year old.
 
@@ -61,26 +61,38 @@ def _clean_objectives(raw: Any) -> list[dict[str, str]]:
             continue
         oid = str(item.get("id", "")).strip()
         label = str(item.get("label", "")).strip()
+        captured_if = str(item.get("captured_if", "")).strip()
         if oid and label:
-            objectives.append({"id": oid, "label": label})
+            objective = {"id": oid, "label": label}
+            if captured_if:
+                objective["captured_if"] = captured_if
+            objectives.append(objective)
     return objectives
 
 
-def objectives_for_scenario(scenario: str | uuid.UUID | Mapping[str, Any] | None) -> list[dict[str, str]]:
+def scorecard_for_scenario(scenario: str | uuid.UUID | Mapping[str, Any] | None) -> dict[str, Any]:
     if isinstance(scenario, Mapping):
-        objectives = _clean_objectives(scenario.get("objectives"))
-        if objectives:
-            return objectives
+        scorecard = scenario.get("scorecard")
+        if isinstance(scorecard, Mapping):
+            return {
+                "objectives": _clean_objectives(scorecard.get("objectives")),
+                "avoid": [str(item).strip() for item in scorecard.get("avoid", []) if str(item).strip()],
+            }
         key = str(scenario.get("id", ""))
     else:
         key = str(scenario) if scenario else ""
-    return [dict(item) for item in SEEDED_OBJECTIVES.get(key, DEFAULT_OBJECTIVES)]
+    seeded = SEEDED_SCORECARDS.get(key)
+    if isinstance(seeded, Mapping):
+        return {
+            "objectives": _clean_objectives(seeded.get("objectives")),
+            "avoid": [str(item).strip() for item in seeded.get("avoid", []) if str(item).strip()],
+        }
+    return {"objectives": DEFAULT_OBJECTIVES, "avoid": []}
 
 
-def _public_brief_for_scenario(scenario: Mapping[str, Any] | None) -> str:
-    if not scenario:
-        return ""
-    return " ".join(str(scenario.get("public_brief", "")).split())
+def objectives_for_scenario(scenario: str | uuid.UUID | Mapping[str, Any] | None) -> list[dict[str, str]]:
+    scorecard = scorecard_for_scenario(scenario)
+    return scorecard["objectives"] or [dict(item) for item in DEFAULT_OBJECTIVES]
 
 
 def _clamp_score(value: Any) -> int:
@@ -145,14 +157,20 @@ def parse_judge_response(text: str) -> dict[str, Any]:
     return raw
 
 
-def _transcript_payload(transcript: list[dict[str, str]], objectives: list[dict[str, str]], public_brief: str = "") -> str:
+def _transcript_payload(transcript: list[dict[str, str]], scorecard: dict[str, Any]) -> str:
     conversation = "\n".join(
         f"{'CLIENT' if item['role'] == 'client' else 'BOT'}: {item['text']}"
         for item in transcript
     )
+    objectives = scorecard.get("objectives") or DEFAULT_OBJECTIVES
     objective_lines = "\n".join(f"- {item['id']}: {item['label']}" for item in objectives)
-    brief = f"PUBLIC CLIENT BRIEF:\n{public_brief}\n\n" if public_brief else ""
-    return f"{brief}OBJECTIVES:\n{objective_lines}\n\nTRANSCRIPT:\n{conversation}"
+    criteria_lines = "\n".join(
+        f"- {item['id']}: {item.get('captured_if', item['label'])}"
+        for item in objectives
+    )
+    avoid = scorecard.get("avoid") or []
+    avoid_lines = "\n".join(f"- {item}" for item in avoid) if avoid else "- No scenario-specific avoid items."
+    return f"SCORECARD OBJECTIVES:\n{objective_lines}\n\nCAPTURE CRITERIA:\n{criteria_lines}\n\nAVOID:\n{avoid_lines}\n\nTRANSCRIPT:\n{conversation}"
 
 
 async def evaluate_transcript(
@@ -163,8 +181,9 @@ async def evaluate_transcript(
     call_text: CallText = _call_with_retry,
 ) -> dict[str, Any]:
     scenario_ref = scenario if scenario is not None else scenario_id
-    objectives = objectives_for_scenario(scenario_ref)
-    payload = _transcript_payload(transcript, objectives, _public_brief_for_scenario(scenario))
+    scorecard = scorecard_for_scenario(scenario_ref)
+    objectives = scorecard["objectives"] or DEFAULT_OBJECTIVES
+    payload = _transcript_payload(transcript, scorecard)
     last_error: Exception | None = None
     for _ in range(2):
         try:

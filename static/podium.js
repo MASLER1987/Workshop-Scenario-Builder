@@ -41,13 +41,12 @@ function sortedSessions() {
 
 function renderGrid() {
   detail = null;
-  app.innerHTML = `<div class="podium-shell"><header class="podium-header"><div class="podium-title"><h1>Prompt Playground Podium</h1><p>${sessions.length} participants live</p></div><div class="podium-actions"><select id="scen">${scenarios.map((s) => `<option value="${s.id}" ${s.is_active ? "selected" : ""}>${esc(s.title)}</option>`).join("")}</select><button class="btn secondary" id="reset">Reset</button></div></header>${summaryStrip()}<div class="sortbar"><button class="btn ${sortMode === "leaderboard" ? "primary" : "secondary"}" data-sort="leaderboard">Leaderboard</button><button class="btn ${sortMode === "improved" ? "primary" : "secondary"}" data-sort="improved">Most improved</button></div><section class="grid">${sortedSessions().map(card).join("")}</section></div>`;
+  app.innerHTML = `<div class="podium-shell"><header class="podium-header"><div class="podium-title"><h1>Prompt Playground Podium</h1><p>${sessions.length} participants live</p></div><div class="podium-actions"><span class="badge">Scenario pool: ${scenarios.length}</span><button class="btn secondary" id="reset">Reset</button></div></header>${summaryStrip()}<div class="sortbar"><button class="btn ${sortMode === "leaderboard" ? "primary" : "secondary"}" data-sort="leaderboard">Leaderboard</button><button class="btn ${sortMode === "improved" ? "primary" : "secondary"}" data-sort="improved">Most improved</button></div><section class="grid">${sortedSessions().map(card).join("")}</section></div>`;
   document.querySelectorAll(".card").forEach((c) => (c.onclick = () => openDetail(c.dataset.id)));
   document.querySelectorAll("[data-sort]").forEach((b) => (b.onclick = () => {
     sortMode = b.dataset.sort;
     renderGrid();
   }));
-  document.querySelector("#scen").onchange = (e) => api(`/api/podium/scenarios/${e.target.value}/activate`, { method: "POST" }).then(load);
   document.querySelector("#reset").onclick = () => confirm("Wipe sessions, instructions, and runs?") && api("/api/podium/reset", { method: "POST" }).then(load);
 }
 

@@ -4,9 +4,25 @@ import uuid
 import unittest
 
 from app import main
+from app.seed import GENERIC_PARTICIPANT_BRIEF
 
 
 class MainStreamingTests(unittest.TestCase):
+    def test_participant_scenario_payload_is_generic_family_brief(self):
+        payload = main.participant_scenario_payload()
+
+        self.assertEqual(payload["title"], "Family team enquiry")
+        self.assertEqual(payload["public_brief"], GENERIC_PARTICIPANT_BRIEF)
+        self.assertNotIn("contested", payload["public_brief"].lower())
+        self.assertNotIn("passport", payload["public_brief"].lower())
+        self.assertNotIn("score", payload["public_brief"].lower())
+
+    def test_run_scenario_selection_uses_random_pool_by_default(self):
+        source = main.select_run_scenario_sql()
+
+        self.assertIn("ORDER BY random()", source)
+        self.assertIn("LIMIT 1", source)
+
     def test_stream_emits_score_before_done_and_persists_score(self):
         async def fake_events(instruction_text, scenario, transcript=None):
             transcript.append({"role": "client", "text": "Help"})

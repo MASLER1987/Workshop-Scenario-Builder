@@ -3,50 +3,66 @@ import json
 import unittest
 
 from app import evaluation
+from app.seed import GENERIC_PARTICIPANT_BRIEF, SCENARIOS
 
 
 class EvaluationTests(unittest.TestCase):
+    def test_seeded_scenarios_are_family_intake_with_hidden_scorecards(self):
+        self.assertIn("family", GENERIC_PARTICIPANT_BRIEF.lower())
+        self.assertGreaterEqual(len(SCENARIOS), 2)
+        for scenario in SCENARIOS:
+            self.assertIn("Family", scenario["title"])
+            self.assertIn("scorecard", scenario)
+            self.assertIn("objectives", scenario["scorecard"])
+            self.assertNotIn("Key facts", scenario["hidden_brief"])
+            self.assertNotIn("reveal ONLY", scenario["hidden_brief"])
+            self.assertNotIn("scorecard", scenario["hidden_brief"].lower())
+            self.assertNotIn("captured_if", scenario["hidden_brief"])
+
     def test_family_objectives_have_five_workshop_targets(self):
         objectives = evaluation.objectives_for_scenario("11111111-1111-1111-1111-111111111111")
 
         self.assertEqual(len(objectives), 5)
         self.assertEqual([item["id"] for item in objectives], [
-            "people",
-            "dispute",
-            "documents",
-            "urgency",
-            "next_steps",
+            "matter_overview",
+            "people_children",
+            "timeframe_urgency",
+            "documents_evidence",
+            "safe_next_step",
         ])
         labels = " ".join(item["label"] for item in objectives).lower()
         self.assertNotIn("dementia", labels)
         self.assertNotIn("pressure", labels)
 
-    def test_employment_objectives_follow_public_brief_not_hidden_facts(self):
+    def test_second_family_scenario_uses_different_specific_scorecard(self):
         objectives = evaluation.objectives_for_scenario("22222222-2222-2222-2222-222222222222")
 
         self.assertEqual([item["id"] for item in objectives], [
-            "timeline",
-            "written_notice",
-            "service_length",
-            "urgency",
-            "next_steps",
+            "matter_overview",
+            "people_children",
+            "timeframe_urgency",
+            "financial_home_context",
+            "safe_next_step",
         ])
         labels = " ".join(item["label"] for item in objectives).lower()
         self.assertNotIn("retaliation", labels)
-        self.assertNotIn("protected", labels)
+        self.assertNotIn("dismissal", labels)
 
-    def test_custom_scenario_objectives_are_used_for_unknown_scenarios(self):
+    def test_custom_scenario_scorecard_is_used_for_unknown_scenarios(self):
         objectives = evaluation.objectives_for_scenario({
             "id": "99999999-9999-9999-9999-999999999999",
-            "objectives": [
-                {"id": "custom_fact", "label": "Custom public fact"},
-                {"id": "next_steps", "label": "Custom next step"},
-            ],
+            "scorecard": {
+                "objectives": [
+                    {"id": "custom_fact", "label": "Custom scorecard target", "captured_if": "Bot asks the relevant question."},
+                    {"id": "next_steps", "label": "Custom next step", "captured_if": "Bot explains handoff."},
+                ],
+                "avoid": ["Do not promise an outcome."],
+            },
         })
 
         self.assertEqual(objectives, [
-            {"id": "custom_fact", "label": "Custom public fact"},
-            {"id": "next_steps", "label": "Custom next step"},
+            {"id": "custom_fact", "label": "Custom scorecard target", "captured_if": "Bot asks the relevant question."},
+            {"id": "next_steps", "label": "Custom next step", "captured_if": "Bot explains handoff."},
         ])
 
     def test_judge_prompt_contains_objectives_rubric_and_tip_instruction(self):
@@ -86,7 +102,7 @@ class EvaluationTests(unittest.TestCase):
             if len(calls) == 1:
                 return "not json"
             return json.dumps({
-                "results": [{"id": "timeline", "captured": True, "evidence": "asked reason"}],
+                "results": [{"id": "matter_overview", "captured": True, "evidence": "asked reason"}],
                 "rubric": {"tone": 3, "questions": 1, "clarity": 4, "honesty": 5},
                 "tip": "Tell your bot to ask only one question at a time.",
             })
@@ -106,7 +122,7 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(score["overall"], 13)
         self.assertIn("one question", score["tip"])
 
-    def test_evaluate_transcript_includes_public_brief_but_not_hidden_brief(self):
+    def test_evaluate_transcript_includes_scorecard_but_not_public_or_hidden_brief(self):
         calls = []
 
         async def fake_call(*, system, messages, max_tokens, temperature):
@@ -121,7 +137,10 @@ class EvaluationTests(unittest.TestCase):
             "id": "99999999-9999-9999-9999-999999999999",
             "public_brief": "Public brief target: ask about the contract date.",
             "hidden_brief": "Hidden-only fact: the client secretly lost the original.",
-            "objectives": [{"id": "custom_fact", "label": "Contract date"}],
+            "scorecard": {
+                "objectives": [{"id": "custom_fact", "label": "Contract date", "captured_if": "Bot asks about the contract date."}],
+                "avoid": ["Do not tell the client the contract is definitely valid."],
+            },
         }
 
         async def run():
@@ -134,13 +153,16 @@ class EvaluationTests(unittest.TestCase):
         score = asyncio.run(run())
 
         self.assertEqual(score["captured"], 1)
-        self.assertIn("Public brief target", calls[0])
+        self.assertIn("SCORECARD", calls[0])
+        self.assertIn("Bot asks about the contract date.", calls[0])
+        self.assertIn("Do not tell the client", calls[0])
+        self.assertNotIn("Public brief target", calls[0])
         self.assertNotIn("Hidden-only fact", calls[0])
 
     def test_evaluate_transcript_accepts_fenced_json_response(self):
         async def fake_call(**kwargs):
             return """```json
-{"results":[{"id":"people","captured":true,"evidence":"brother named"}],"rubric":{"tone":5,"questions":4,"clarity":3,"honesty":2},"tip":"Tell your bot to ask one clear follow-up question."}
+{"results":[{"id":"matter_overview","captured":true,"evidence":"children worry"}],"rubric":{"tone":5,"questions":4,"clarity":3,"honesty":2},"tip":"Tell your bot to ask one clear follow-up question."}
 ```"""
 
         async def run():

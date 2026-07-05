@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from . import db
 from .evaluation import evaluate_transcript
+from .seed import GENERIC_PARTICIPANT_BRIEF
 from .simulation import ndjson, stream_simulation_events
 
 locks: set[str] = set()
@@ -43,6 +44,14 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 def rowdict(r):
     return dict(r) if r else None
 
+
+def participant_scenario_payload() -> dict[str, str]:
+    return {"title": "Family team enquiry", "public_brief": GENERIC_PARTICIPANT_BRIEF}
+
+
+def select_run_scenario_sql() -> str:
+    return "SELECT * FROM scenarios ORDER BY random() LIMIT 1"
+
 def podium_auth(key: str | None):
     if not key or key != os.environ.get("PODIUM_KEY"):
         raise HTTPException(403, "Invalid podium key")
@@ -55,6 +64,16 @@ async def active_scenario():
         row = await db.fetchrow("SELECT * FROM scenarios WHERE is_active=true LIMIT 1")
     if not row:
         raise HTTPException(500, "No active scenario")
+    return row
+
+async def run_scenario():
+    sid = os.environ.get("ACTIVE_SCENARIO_ID")
+    if sid:
+        row = await db.fetchrow("SELECT * FROM scenarios WHERE id=$1", uuid.UUID(sid))
+    else:
+        row = await db.fetchrow(select_run_scenario_sql())
+    if not row:
+        raise HTTPException(500, "No scenario available")
     return row
 
 @app.get("/")
@@ -81,8 +100,7 @@ async def session_state(sid: uuid.UUID):
     if not s: raise HTTPException(404, "Session not found")
     inst = await db.fetchrow("SELECT * FROM instructions WHERE session_id=$1 ORDER BY version_number DESC LIMIT 1", sid)
     run = await db.fetchrow("SELECT * FROM runs WHERE session_id=$1 ORDER BY created_at DESC LIMIT 1", sid)
-    scen = await active_scenario()
-    return {"display_name": s["display_name"], "latest_instruction": rowdict(inst), "latest_run": rowdict(run), "active_scenario": {"title": scen["title"], "public_brief": scen["public_brief"]}}
+    return {"display_name": s["display_name"], "latest_instruction": rowdict(inst), "latest_run": rowdict(run), "active_scenario": participant_scenario_payload()}
 
 async def _prepare_run(sid: uuid.UUID, instruction_text: str | None):
     key = str(sid)
@@ -101,7 +119,7 @@ async def _prepare_run(sid: uuid.UUID, instruction_text: str | None):
             else:
                 ver = (latest["version_number"] if latest else 0) + 1
                 inst = await con.fetchrow("INSERT INTO instructions (id,session_id,version_number,text) VALUES ($1,$2,$3,$4) RETURNING *", uuid.uuid4(), sid, ver, instruction_text)
-            scen = await active_scenario()
+            scen = await run_scenario()
         return {"run_id": uuid.uuid4(), "session_id": sid, "instruction": inst, "scenario": dict(scen)}
     except Exception:
         locks.discard(key)

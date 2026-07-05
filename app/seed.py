@@ -1,32 +1,158 @@
+GENERIC_PARTICIPANT_BRIEF = (
+    "You are writing instructions for a generic family team enquiry intake chatbot. "
+    "The bot should respond warmly, gather a useful overview of the family law enquiry, "
+    "ask clear follow-up questions one at a time, avoid giving legal advice or making promises, "
+    "and explain that a human member of the family team can follow up."
+)
+
+SHARED_AVOID = [
+    "Do not give definitive legal advice.",
+    "Do not promise a specific outcome.",
+    "Do not challenge, blame, or cross-examine the client.",
+    "Do not ignore safety, children, deadline, or urgency signals.",
+]
+
 SCENARIOS = [
     {
         "id": "11111111-1111-1111-1111-111111111111",
-        "title": "Family dispute — contested will",
-        "public_brief": "A client has messaged the firm out of hours about a dispute with their sibling over their late mother's estate. Your chatbot is the first point of contact. A good intake bot should find out who is involved, what the dispute is actually about, whether any documents exist, how urgent things are — and manage expectations about what a chatbot can and can't advise on.",
-        "opening_message": "Hi, I need help. My brother is trying to take everything from my mum's estate and I don't know what to do. Can someone help me?",
-        "hidden_brief": "You are Sarah Whitmore, 52, from Sheffield. Your mother died 4 months ago. Your brother David is the executor of the will and has told you the house is being sold and you're getting \"what's left after costs\". You are anxious, a bit rambling, and jump between emotion and facts.\nKey facts — reveal ONLY if asked a question that would naturally surface each one:\n- There IS a will, made in 2019. You have a photocopy; David holds the original.\n- You found a letter dated 2023 in your mother's papers saying she wanted to update the will to split the house equally between you and David. It is signed but you don't know if it counts as anything legal.\n- David has already put the house on the market with an estate agent.\n- Your mother had dementia diagnosed in 2022. You suspect David pressured her about money in her final year.\n- You have not spoken to any solicitor yet. Money is tight — you will ask about cost if the conversation goes well.\nYour goals: feel heard, find out if you can stop the house sale, and get a human to call you back. If the bot is cold, robotic, or gives you a generic brush-off, become frustrated and say so. If it asks good questions, open up and share the facts above naturally.",
-        "objectives": [
-            {"id": "people", "label": "Who is involved"},
-            {"id": "dispute", "label": "What the dispute is about"},
-            {"id": "documents", "label": "Relevant estate documents or will"},
-            {"id": "urgency", "label": "How urgent the situation is"},
-            {"id": "next_steps", "label": "Clear expectation and human follow-up next step"},
-        ],
+        "title": "Family enquiry - children and travel worry",
+        "public_brief": GENERIC_PARTICIPANT_BRIEF,
+        "opening_message": "Hi, I need some advice about my children and my ex. I'm really worried about this weekend.",
+        "hidden_brief": (
+            "You are Priya, 39, and you separated from your husband three months ago. You are tired, worried, and slightly embarrassed about asking for help by chat. "
+            "Your daughter is 8 and your son is 12. The children usually stay with you in the week and see their dad most Saturdays, but nothing has been written down. "
+            "He has said he is taking them to stay with his parents this weekend and he has been evasive about when they are coming back. He is also holding the children's passports because he says he paid for them. "
+            "There was an argument last Friday in the hallway when he came to collect school bags; he shouted and blocked the door for a moment, but you do not know whether to call it domestic abuse. "
+            "Your sister keeps telling you to call the police, the school sent an email about your son's anxiety, and you have WhatsApp messages where your ex says you are overreacting. "
+            "You want someone calm to tell you whether the firm can help before the weekend, but you do not want a chatbot pretending it can solve everything."
+        ),
+        "scorecard": {
+            "objectives": [
+                {
+                    "id": "matter_overview",
+                    "label": "General overview of the family enquiry",
+                    "captured_if": "The bot establishes that this is about children arrangements/contact rather than treating it as a generic complaint.",
+                },
+                {
+                    "id": "people_children",
+                    "label": "People involved and children details",
+                    "captured_if": "The bot asks who is involved and captures that there are children, including at least one age or equivalent identifying detail.",
+                },
+                {
+                    "id": "timeframe_urgency",
+                    "label": "Immediate timeframe or urgency",
+                    "captured_if": "The bot identifies the weekend timing, travel/passport concern, or another reason this may need prompt human review.",
+                },
+                {
+                    "id": "documents_evidence",
+                    "label": "Relevant documents or messages",
+                    "captured_if": "The bot asks about or captures whether there are written arrangements, messages, school emails, passports, or other useful records.",
+                },
+                {
+                    "id": "safe_next_step",
+                    "label": "Safe next step without legal advice",
+                    "captured_if": "The bot gives a clear human follow-up route and manages expectations without telling the client what legal action to take.",
+                },
+            ],
+            "avoid": SHARED_AVOID + [
+                "Do not tell the client they can or cannot stop the trip.",
+                "Do not dismiss the hallway argument or tell the client whether it legally counts as abuse.",
+            ],
+        },
         "is_active": True,
     },
     {
         "id": "22222222-2222-2222-2222-222222222222",
-        "title": "Employment — sudden dismissal",
-        "public_brief": "A client has been dismissed from their job with immediate effect and is messaging the firm the same evening. A good intake bot should establish the timeline, whether anything is in writing, length of service, and urgency — employment claims have strict deadlines.",
-        "opening_message": "I just got sacked today with no warning after 6 years. They walked me out of the building. Is that even legal??",
-        "hidden_brief": "You are Marcus Bell, 38, a warehouse shift supervisor. Dismissed today, told verbally it was for \"gross misconduct\" over a safety incident last week that you say wasn't your fault. You are angry and type in short bursts.\nKey facts — reveal ONLY if asked:\n- You have received nothing in writing yet; they said a letter would follow.\n- Two weeks ago you raised a formal complaint about unsafe staffing levels with HR, in writing. You suspect the dismissal is retaliation.\n- There was no disciplinary hearing or investigation meeting.\n- You were paid until today only; you're worried about rent next month.\nYour goals: find out if you have a case, what deadlines apply, and get a callback tomorrow. You respond well to being taken seriously and calmly; you escalate if patronised.",
-        "objectives": [
-            {"id": "timeline", "label": "What happened and when"},
-            {"id": "written_notice", "label": "Whether anything is in writing"},
-            {"id": "service_length", "label": "Length of service"},
-            {"id": "urgency", "label": "Urgency and deadline awareness"},
-            {"id": "next_steps", "label": "Clear next step for human follow-up"},
-        ],
+        "title": "Family enquiry - separation finances and home",
+        "public_brief": GENERIC_PARTICIPANT_BRIEF,
+        "opening_message": "Hello. I've split up with my husband and I'm scared I'm going to lose the house.",
+        "hidden_brief": (
+            "You are Helen, 46. You and your husband separated about six weeks ago after a long period of arguing about money. You are still living in the family home with your 15-year-old son, while your husband has been staying with his brother. "
+            "The mortgage is in both names, but he has always dealt with most of the bills and online banking. Yesterday he said he was going to stop paying because he is not living there anymore. "
+            "You work part time at a dental practice and have some savings, though not enough to cover the mortgage for long. There is a joint account, a small credit card debt, and you think he has a pension through work. "
+            "Your friend said you should change the locks, your mum thinks you should wait until things calm down, and you have not spoken to a solicitor. "
+            "You mostly want to know whether the firm deals with this sort of thing and whether someone can call you before the next mortgage payment is due in two weeks."
+        ),
+        "scorecard": {
+            "objectives": [
+                {
+                    "id": "matter_overview",
+                    "label": "General overview of the family enquiry",
+                    "captured_if": "The bot establishes that the enquiry concerns separation, finances, and the family home.",
+                },
+                {
+                    "id": "people_children",
+                    "label": "People involved and dependent children",
+                    "captured_if": "The bot asks who is involved and captures the spouse/ex-partner and whether any children or dependants are affected.",
+                },
+                {
+                    "id": "timeframe_urgency",
+                    "label": "Important timeframe or pressure point",
+                    "captured_if": "The bot captures the mortgage payment timing, recent separation, threatened non-payment, or another concrete urgency point.",
+                },
+                {
+                    "id": "financial_home_context",
+                    "label": "Home, mortgage, and financial overview",
+                    "captured_if": "The bot asks about the home, mortgage, bills, accounts, income, savings, debts, pensions, or similar financial context.",
+                },
+                {
+                    "id": "safe_next_step",
+                    "label": "Safe next step without legal advice",
+                    "captured_if": "The bot offers a clear human follow-up and avoids advising actions such as changing locks or stopping payments.",
+                },
+            ],
+            "avoid": SHARED_AVOID + [
+                "Do not advise the client to change the locks.",
+                "Do not promise that the client can keep the house.",
+            ],
+        },
+        "is_active": False,
+    },
+    {
+        "id": "33333333-3333-3333-3333-333333333333",
+        "title": "Family enquiry - grandparent contact",
+        "public_brief": GENERIC_PARTICIPANT_BRIEF,
+        "opening_message": "I'm trying to find out if I can see my grandson again. My daughter won't speak to me.",
+        "hidden_brief": (
+            "You are Alan, 67. Your daughter stopped speaking to you after a difficult argument at Christmas, and you have not seen your 5-year-old grandson since February. "
+            "You used to collect him from nursery on Wednesdays and sometimes had him overnight when your daughter worked late. There was never any formal arrangement because you were family. "
+            "Your daughter's new partner does not like you, and you suspect that is part of the problem, but you also know you said some things you regret. "
+            "You have birthday cards, photos, and messages showing that you were involved in your grandson's life. You do not want to upset anyone, but you are lonely and worried he will forget you. "
+            "A neighbour mentioned grandparents' rights, which made you hopeful, although you are not sure if that is a real thing. You want to know whether a family solicitor could talk to you this week."
+        ),
+        "scorecard": {
+            "objectives": [
+                {
+                    "id": "matter_overview",
+                    "label": "General overview of the family enquiry",
+                    "captured_if": "The bot establishes that this is about a grandparent seeking contact with a child.",
+                },
+                {
+                    "id": "people_children",
+                    "label": "People involved and child details",
+                    "captured_if": "The bot asks who is involved and captures the grandparent, parent, and child relationship or the child's age.",
+                },
+                {
+                    "id": "timeframe_urgency",
+                    "label": "Timeline and desired contact",
+                    "captured_if": "The bot captures when contact stopped, previous contact arrangements, or the client's preferred timing for a call.",
+                },
+                {
+                    "id": "relationship_context",
+                    "label": "Relationship background and previous involvement",
+                    "captured_if": "The bot asks about previous care/contact, family relationship context, or records showing involvement.",
+                },
+                {
+                    "id": "safe_next_step",
+                    "label": "Safe next step without legal advice",
+                    "captured_if": "The bot offers human follow-up without promising grandparents have an automatic right or giving definitive advice.",
+                },
+            ],
+            "avoid": SHARED_AVOID + [
+                "Do not say grandparents have an automatic legal right to contact.",
+                "Do not encourage the client to contact the child or parent in a way that may escalate conflict.",
+            ],
+        },
         "is_active": False,
     },
 ]

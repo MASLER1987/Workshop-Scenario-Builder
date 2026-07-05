@@ -1,6 +1,6 @@
 # Prompt Playground — Workshop Scenario Builder
 
-A single FastAPI service for live workshops where participants write intake chatbot instructions and test them against an Anthropic-powered simulated legal client. A presenter podium shows sessions, instructions, run transcripts, scenario switching, and reset controls.
+A single FastAPI service for live workshops where participants write generic family-team intake chatbot instructions and test them against a randomly selected Anthropic-powered simulated legal client. A presenter podium shows sessions, instructions, run transcripts, scores, and reset controls.
 
 ## Stack
 
@@ -16,7 +16,7 @@ A single FastAPI service for live workshops where participants write intake chat
 | `DATABASE_URL` | Postgres connection string |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
 | `PODIUM_KEY` | Shared secret for `/podium?key=...` and podium API routes |
-| `ACTIVE_SCENARIO_ID` | Optional active scenario override |
+| `ACTIVE_SCENARIO_ID` | Optional scenario override; otherwise each run selects randomly from the family scenario pool |
 | `MAX_ACTIVE_RUNS` | Optional global LLM run cap per service instance; defaults to `10` |
 
 ## Run locally
