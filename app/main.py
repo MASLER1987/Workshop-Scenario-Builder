@@ -4,12 +4,12 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import db
-from .simulation import run_simulation
+from .simulation import ndjson, stream_simulation_events
 
 locks: set[str] = set()
 
@@ -17,7 +17,7 @@ class SessionIn(BaseModel):
     display_name: str = Field(min_length=1, max_length=40)
 
 class RunIn(BaseModel):
-    instruction_text: str = Field(min_length=1, max_length=4000)
+    instruction_text: str = Field(max_length=4000)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -72,7 +72,7 @@ async def session_state(sid: uuid.UUID):
     scen = await active_scenario()
     return {"display_name": s["display_name"], "latest_instruction": rowdict(inst), "latest_run": rowdict(run), "active_scenario": {"title": scen["title"], "public_brief": scen["public_brief"]}}
 
-async def _run_for_session(sid: uuid.UUID, instruction_text: str | None):
+async def _prepare_run(sid: uuid.UUID, instruction_text: str | None):
     key = str(sid)
     if key in locks: raise HTTPException(409, "A run is already in flight for this session")
     locks.add(key)
@@ -90,21 +90,69 @@ async def _run_for_session(sid: uuid.UUID, instruction_text: str | None):
                 ver = (latest["version_number"] if latest else 0) + 1
                 inst = await con.fetchrow("INSERT INTO instructions (id,session_id,version_number,text) VALUES ($1,$2,$3,$4) RETURNING *", uuid.uuid4(), sid, ver, instruction_text)
             scen = await active_scenario()
-        transcript, ended = await asyncio.wait_for(run_simulation(inst["text"], dict(scen)), timeout=90)
-        rid = uuid.uuid4()
-        await db.execute("INSERT INTO runs (id,session_id,instruction_id,scenario_id,transcript,ended_reason) VALUES ($1,$2,$3,$4,$5::jsonb,$6)", rid, sid, inst["id"], scen["id"], transcript, ended)
-        await db.execute("UPDATE sessions SET last_active_at=now() WHERE id=$1", sid)
-        return {"run_id": str(rid), "version_number": inst["version_number"], "transcript": transcript, "ended_reason": ended}
-    finally:
+        return {"run_id": uuid.uuid4(), "session_id": sid, "instruction": inst, "scenario": dict(scen)}
+    except Exception:
         locks.discard(key)
+        raise
+
+async def _persist_run(prepared: dict, transcript: list[dict[str, str]], ended_reason: str):
+    await db.execute(
+        "INSERT INTO runs (id,session_id,instruction_id,scenario_id,transcript,ended_reason) VALUES ($1,$2,$3,$4,$5::jsonb,$6)",
+        prepared["run_id"],
+        prepared["session_id"],
+        prepared["instruction"]["id"],
+        prepared["scenario"]["id"],
+        transcript,
+        ended_reason,
+    )
+    await db.execute("UPDATE sessions SET last_active_at=now() WHERE id=$1", prepared["session_id"])
+
+async def _stream_prepared_run(prepared: dict):
+    transcript: list[dict[str, str]] = []
+    ended_reason = "error"
+    persisted = False
+    try:
+        yield ndjson({"type": "run_start", "version_number": prepared["instruction"]["version_number"]})
+        async with asyncio.timeout(90):
+            async for event in stream_simulation_events(
+                prepared["instruction"]["text"],
+                prepared["scenario"],
+                transcript=transcript,
+            ):
+                if event["type"] == "_result":
+                    ended_reason = event["ended_reason"]
+                    await _persist_run(prepared, transcript, ended_reason)
+                    persisted = True
+                    yield ndjson({"type": "done", "run_id": str(prepared["run_id"]), "ended_reason": ended_reason})
+                else:
+                    yield ndjson(event)
+    except asyncio.CancelledError:
+        if not persisted:
+            await asyncio.shield(_persist_run(prepared, transcript, ended_reason))
+        raise
+    except Exception as exc:
+        if not persisted:
+            yield ndjson({"type": "error", "detail": str(exc) or "Simulation failed"})
+            await _persist_run(prepared, transcript, ended_reason)
+            persisted = True
+            yield ndjson({"type": "done", "run_id": str(prepared["run_id"]), "ended_reason": ended_reason})
+    finally:
+        locks.discard(str(prepared["session_id"]))
+
+def _streaming_response(prepared: dict):
+    return StreamingResponse(
+        _stream_prepared_run(prepared),
+        media_type="application/x-ndjson",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
 
 @app.post("/api/sessions/{sid}/run")
 async def run(sid: uuid.UUID, body: RunIn):
-    return await _run_for_session(sid, body.instruction_text)
+    return _streaming_response(await _prepare_run(sid, body.instruction_text))
 
 @app.post("/api/sessions/{sid}/rerun")
 async def rerun(sid: uuid.UUID):
-    return await _run_for_session(sid, None)
+    return _streaming_response(await _prepare_run(sid, None))
 
 @app.get("/api/podium/sessions")
 async def podium_sessions(key: str = Query(...)):
