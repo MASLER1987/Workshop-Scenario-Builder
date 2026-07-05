@@ -47,12 +47,12 @@ async def active_scenario():
 
 @app.get("/")
 async def index():
-    return FileResponse("static/index.html")
+    return FileResponse("static/index.html", headers={"Cache-Control": "no-store"})
 
 @app.get("/podium")
 async def podium(key: str | None = None):
     podium_auth(key)
-    return FileResponse("static/podium.html")
+    return FileResponse("static/podium.html", headers={"Cache-Control": "no-store"})
 
 @app.get("/health")
 async def health(): return {"ok": True}

@@ -19,6 +19,10 @@ const api = (url, opt = {}) =>
     return r.json();
   });
 
+function nextPaint() {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
 function saveDraft() {
   const input = $("#instruction");
   if (input && state.sid) localStorage["draft:" + state.sid] = input.value;
@@ -100,10 +104,10 @@ async function streamRun(url, opt) {
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
       buffer = lines.pop() || "";
-      for (const line of lines) handleStreamEvent(JSON.parse(line));
+      for (const line of lines) await processStreamLine(line);
     }
     buffer += decoder.decode();
-    if (buffer.trim()) handleStreamEvent(JSON.parse(buffer));
+    if (buffer.trim()) await processStreamLine(buffer);
     if (state.streaming) {
       state.notice = "connection lost - partial conversation shown";
       state.streaming = false;
@@ -114,6 +118,12 @@ async function streamRun(url, opt) {
     state.streaming = false;
     render();
   }
+}
+
+async function processStreamLine(line) {
+  if (!line.trim()) return;
+  handleStreamEvent(JSON.parse(line));
+  await nextPaint();
 }
 
 function handleStreamEvent(event) {
