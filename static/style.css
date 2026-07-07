@@ -153,6 +153,20 @@ textarea.short{min-height:130px}
 .edit-slide-panel input:focus,.edit-slide-panel textarea:focus{outline:3px solid #60a5fa66;border-color:#93c5fd}
 .icon-close{border:0;background:#1f2937;color:white;border-radius:8px;width:40px;height:40px;font-weight:900;cursor:pointer}
 .edit-slide-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;flex-wrap:wrap}
+.slide-list-panel{position:fixed;top:24px;left:24px;bottom:24px;width:min(620px,calc(100vw - 48px));z-index:19;background:#111827;color:white;border:1px solid #334155;border-radius:8px;box-shadow:0 24px 80px #0007;padding:22px;overflow:auto}
+.slide-list-panel header{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:18px}
+.slide-list-panel h2{font-size:34px;margin:0;line-height:1}
+.slide-list-panel .eyebrow{color:#93c5fd}
+.slide-list-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+.slide-list-actions span{color:#cbd5e1;font-weight:800}
+.slide-rows{display:grid;gap:10px}
+.slide-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;cursor:grab}
+.slide-row:active{cursor:grabbing}
+.slide-row.selected{border-color:#93c5fd;box-shadow:0 0 0 3px #60a5fa44}
+.drag-handle{color:#93c5fd;font-weight:900;text-align:center;letter-spacing:-1px}
+.slide-row-main{border:0;background:transparent;color:white;text-align:left;padding:4px;cursor:pointer;min-width:0}
+.slide-row-main strong{display:block;font-size:18px;line-height:1.15;overflow-wrap:anywhere}
+.slide-row-main small{display:block;color:#cbd5e1;font-weight:800;margin-top:4px}
 .curation-layout{display:grid;grid-template-columns:minmax(360px,.9fr) minmax(520px,1.1fr);gap:22px;flex:1;min-height:0}
 .curation-layout>section{background:var(--surface);border:1px solid var(--line-soft);border-radius:8px;padding:24px;box-shadow:0 8px 22px #10182810;overflow:auto}
 .curation-layout h2{font-size:clamp(28px,2vw,42px);margin:0 0 18px}

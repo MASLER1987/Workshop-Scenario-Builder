@@ -10,6 +10,8 @@ let presentationState = null;
 let responses = [];
 let questions = [];
 let artifacts = [];
+let deckSlides = PRESENTATION_SLIDES;
+let deckPersisted = false;
 let slideOverrides = {};
 let selectedSlideIndex = 0;
 
@@ -34,8 +36,9 @@ async function load() {
   scenarios = await api("/api/podium/scenarios");
   summary = await api("/api/podium/summary");
   presentationState = await api("/api/podium/presentation");
+  await loadSlideDeck();
   await loadSlideOverrides();
-  selectedSlideIndex = Math.max(0, PRESENTATION_SLIDES.findIndex((slide) => slide.id === presentationState.active_slide_id));
+  selectedSlideIndex = Math.max(0, deckSlides.findIndex((slide) => slide.id === presentationState.active_slide_id));
   if (viewMode === "grid") renderGrid();
   else renderPresentation();
 }
@@ -54,8 +57,14 @@ async function loadSlideOverrides() {
   slideOverrides = Object.fromEntries(rows.map((row) => [row.slide_id, row.payload || {}]));
 }
 
+async function loadSlideDeck() {
+  const rows = await api("/api/podium/slides");
+  deckPersisted = rows.length > 0;
+  deckSlides = deckPersisted ? rows.map((row) => row.payload || {}) : PRESENTATION_SLIDES;
+}
+
 function baseSlide() {
-  return PRESENTATION_SLIDES[selectedSlideIndex] || PRESENTATION_SLIDES[0];
+  return deckSlides[selectedSlideIndex] || deckSlides[0] || PRESENTATION_SLIDES[0];
 }
 
 function effectiveSlide(slide = baseSlide()) {
@@ -79,7 +88,7 @@ function currentSlide() {
 }
 
 async function activateSlide(index) {
-  selectedSlideIndex = Math.max(0, Math.min(PRESENTATION_SLIDES.length - 1, index));
+  selectedSlideIndex = Math.max(0, Math.min(deckSlides.length - 1, index));
   const slide = baseSlide();
   await api("/api/podium/presentation/activate", {
     method: "POST",
@@ -131,15 +140,108 @@ function renderByTemplate(slide) {
 
 function slideShell(slide, body) {
   const edited = slideOverrides[slide.id] ? '<span class="badge edited-badge">Edited</span>' : "";
-  app.innerHTML = `<div class="podium-shell presentation-shell template-${esc(slide.template || "standard")}"><header class="presentation-top"><div><p class="eyebrow">${esc(slide.section)}</p><h1>${esc(slide.title)}</h1>${edited}</div><div class="join-box"><img class="qr-code" src="${esc(qrImageUrl())}" alt="QR code for participant app"><div><span>Join</span><strong>${esc(qrUrl())}</strong></div></div></header>${body}<footer class="presentation-controls"><button class="btn secondary" id="prev">Back</button><span>${selectedSlideIndex + 1} / ${PRESENTATION_SLIDES.length}</span><button class="btn primary" id="next">Next</button><button class="btn secondary" id="edit-slide">Edit slide</button><button class="btn secondary" id="grid">Live grid</button><button class="btn secondary" id="reset">Reset</button></footer></div>`;
+  app.innerHTML = `<div class="podium-shell presentation-shell template-${esc(slide.template || "standard")}"><header class="presentation-top"><div><p class="eyebrow">${esc(slide.section)}</p><h1>${esc(slide.title)}</h1>${edited}</div><div class="join-box"><img class="qr-code" src="${esc(qrImageUrl())}" alt="QR code for participant app"><div><span>Join</span><strong>${esc(qrUrl())}</strong></div></div></header>${body}<footer class="presentation-controls"><button class="btn secondary" id="prev">Back</button><span>${selectedSlideIndex + 1} / ${deckSlides.length}</span><button class="btn primary" id="next">Next</button><button class="btn secondary" id="slide-list">Slide list</button><button class="btn secondary" id="edit-slide">Edit slide</button><button class="btn secondary" id="grid">Live grid</button><button class="btn secondary" id="reset">Reset</button></footer></div>`;
   document.querySelector("#prev").onclick = () => activateSlide(selectedSlideIndex - 1);
   document.querySelector("#next").onclick = () => activateSlide(selectedSlideIndex + 1);
+  document.querySelector("#slide-list").onclick = renderSlideList;
   document.querySelector("#edit-slide").onclick = () => openSlideEditor(slide);
   document.querySelector("#grid").onclick = () => {
     viewMode = "grid";
     renderGrid();
   };
   document.querySelector("#reset").onclick = () => confirm("Wipe workshop data?") && api("/api/podium/reset", { method: "POST" }).then(load);
+}
+
+function renderSlideList() {
+  closeSlideEditor();
+  document.querySelector(".slide-list-panel")?.remove();
+  const rows = deckSlides.map((slide, index) => `<article class="slide-row ${index === selectedSlideIndex ? "selected" : ""}" draggable="true" data-slide-id="${esc(slide.id)}"><span class="drag-handle">::</span><button class="slide-row-main" data-go-slide="${index}"><strong>${index + 1}. ${esc(slide.title || "Untitled slide")}</strong><small>${esc(slide.section || "slide")} · ${esc(slide.template || "standard")} · phone: ${esc(slide.participantMode || "passive")}</small></button><button class="btn secondary" data-edit-row="${index}">Edit</button></article>`).join("");
+  document.body.insertAdjacentHTML("beforeend", `<aside class="slide-list-panel"><header><div><span class="eyebrow">Deck</span><h2>Slide list</h2></div><button type="button" class="icon-close" id="close-slide-list" aria-label="Close">x</button></header><div class="slide-list-actions"><button class="btn primary" id="new-slide">New slide</button><span>${deckPersisted ? "Saved in Railway" : "Using bundled deck"}</span></div><div class="slide-rows">${rows}</div></aside>`);
+  document.querySelector("#close-slide-list").onclick = closeSlideList;
+  document.querySelector("#new-slide").onclick = createBlankSlide;
+  document.querySelectorAll("[data-go-slide]").forEach((button) => (button.onclick = () => {
+    closeSlideList();
+    activateSlide(Number(button.dataset.goSlide));
+  }));
+  document.querySelectorAll("[data-edit-row]").forEach((button) => (button.onclick = () => openSlideEditor(effectiveSlide(deckSlides[Number(button.dataset.editRow)]))));
+  bindSlideRows();
+}
+
+function closeSlideList() {
+  document.querySelector(".slide-list-panel")?.remove();
+}
+
+function bindSlideRows() {
+  document.querySelectorAll(".slide-row[draggable]").forEach((row) => {
+    row.ondragstart = (event) => event.dataTransfer.setData("text/plain", row.dataset.slideId);
+    row.ondragover = allowDrop;
+    row.ondrop = (event) => {
+      event.preventDefault();
+      reorderSlide(event.dataTransfer.getData("text/plain"), row.dataset.slideId);
+    };
+  });
+}
+
+async function persistCurrentDeck() {
+  const slides = deckSlides.map((slide) => effectiveSlide(slide));
+  await api("/api/podium/slides", {
+    method: "PUT",
+    body: JSON.stringify({ slides }),
+  });
+  deckPersisted = true;
+}
+
+async function saveSlideOrder() {
+  await persistCurrentDeck();
+  await api("/api/podium/slides/order", {
+    method: "PUT",
+    body: JSON.stringify({ slide_ids: deckSlides.map((slide) => slide.id) }),
+  });
+}
+
+async function reorderSlide(sourceId, targetId) {
+  if (!sourceId || !targetId || sourceId === targetId) return;
+  const activeId = currentSlide().id;
+  const sourceIndex = deckSlides.findIndex((slide) => slide.id === sourceId);
+  const targetIndex = deckSlides.findIndex((slide) => slide.id === targetId);
+  if (sourceIndex < 0 || targetIndex < 0) return;
+  const next = [...deckSlides];
+  const [moved] = next.splice(sourceIndex, 1);
+  next.splice(targetIndex, 0, moved);
+  deckSlides = next;
+  selectedSlideIndex = Math.max(0, deckSlides.findIndex((slide) => slide.id === activeId));
+  await saveSlideOrder();
+  renderSlideList();
+  renderPresentation();
+}
+
+async function createBlankSlide() {
+  await persistCurrentDeck();
+  const response = await api("/api/podium/slides", {
+    method: "POST",
+    body: JSON.stringify({ payload: blankSlidePayload() }),
+  });
+  const slide = response.slide?.payload;
+  if (!slide) return;
+  deckPersisted = true;
+  deckSlides = [...deckSlides, slide];
+  selectedSlideIndex = deckSlides.length - 1;
+  closeSlideList();
+  await activateSlide(selectedSlideIndex);
+  openSlideEditor(effectiveSlide(slide));
+}
+
+function blankSlidePayload() {
+  return {
+    title: "Untitled slide",
+    section: "custom",
+    template: "standard",
+    podiumType: "slide",
+    participantMode: "passive",
+    body: "",
+    bullets: [],
+    durationSeconds: 180,
+  };
 }
 
 function openSlideEditor(slide) {
@@ -178,6 +280,7 @@ async function saveSlideOverride(slide) {
     body: JSON.stringify({ payload }),
   });
   slideOverrides[slide.id] = payload;
+  deckSlides = deckSlides.map((item) => item.id === slide.id ? { ...item, ...payload } : item);
   closeSlideEditor();
   renderPresentation();
 }
@@ -185,6 +288,11 @@ async function saveSlideOverride(slide) {
 async function resetSlideOverride(slideId) {
   await api(`/api/podium/slides/${encodeURIComponent(slideId)}`, { method: "DELETE" });
   delete slideOverrides[slideId];
+  const builtin = PRESENTATION_SLIDES.find((slide) => slide.id === slideId);
+  if (builtin) {
+    deckSlides = deckSlides.map((item) => item.id === slideId ? { ...builtin } : item);
+    if (deckPersisted) await persistCurrentDeck();
+  }
   closeSlideEditor();
   renderPresentation();
 }

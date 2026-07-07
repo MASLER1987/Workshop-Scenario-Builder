@@ -108,6 +108,14 @@ async def init_db() -> None:
           payload JSONB NOT NULL,
           updated_at TIMESTAMPTZ DEFAULT now()
         );
+        CREATE TABLE IF NOT EXISTS presentation_slides (
+          slide_id TEXT PRIMARY KEY,
+          position INT NOT NULL,
+          payload JSONB NOT NULL,
+          is_deleted BOOLEAN DEFAULT false,
+          created_at TIMESTAMPTZ DEFAULT now(),
+          updated_at TIMESTAMPTZ DEFAULT now()
+        );
         CREATE UNIQUE INDEX IF NOT EXISTS one_active_scenario ON scenarios ((is_active)) WHERE is_active;
         """)
         await con.execute(

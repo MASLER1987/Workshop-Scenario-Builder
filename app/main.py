@@ -56,6 +56,15 @@ class ArtifactIn(BaseModel):
 class SlideOverrideIn(BaseModel):
     payload: dict = Field(default_factory=dict)
 
+class SlideIn(BaseModel):
+    payload: dict = Field(default_factory=dict)
+
+class SlideDeckIn(BaseModel):
+    slides: list[dict] = Field(default_factory=list)
+
+class SlideOrderIn(BaseModel):
+    slide_ids: list[str] = Field(default_factory=list)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.connect(); await db.init_db()
@@ -504,6 +513,82 @@ async def podium_slide_overrides(key: str = Query(...)):
     rows = await db.fetch("SELECT * FROM presentation_slide_overrides ORDER BY updated_at DESC")
     return [dict(r) for r in rows]
 
+@app.get("/api/podium/slides")
+async def podium_slides(key: str = Query(...)):
+    podium_auth(key)
+    rows = await db.fetch(
+        "SELECT slide_id, position, payload, updated_at FROM presentation_slides WHERE is_deleted=false ORDER BY position, created_at"
+    )
+    return [dict(r) for r in rows]
+
+@app.put("/api/podium/slides")
+async def podium_save_slide_deck(body: SlideDeckIn, key: str = Query(...)):
+    podium_auth(key)
+    slide_ids: list[str] = []
+    async with (await db.pool()).acquire() as con:
+        async with con.transaction():
+            for index, slide in enumerate(body.slides):
+                payload = dict(slide)
+                slide_id = str(payload.get("id") or f"custom-{uuid.uuid4().hex[:10]}")
+                payload["id"] = slide_id
+                slide_ids.append(slide_id)
+                await con.execute(
+                    """INSERT INTO presentation_slides (slide_id, position, payload, is_deleted)
+                       VALUES ($1,$2,$3::jsonb,false)
+                       ON CONFLICT (slide_id)
+                       DO UPDATE SET position=excluded.position,
+                                     payload=excluded.payload,
+                                     is_deleted=false,
+                                     updated_at=now()""",
+                    slide_id,
+                    index,
+                    payload,
+                )
+            if slide_ids:
+                await con.execute("UPDATE presentation_slides SET is_deleted=true, updated_at=now() WHERE NOT (slide_id = ANY($1::text[]))", slide_ids)
+    return {"ok": True, "slide_count": len(slide_ids)}
+
+@app.post("/api/podium/slides")
+async def podium_create_slide(body: SlideIn, key: str = Query(...)):
+    podium_auth(key)
+    slide_id = str(body.payload.get("id") or f"custom-{uuid.uuid4().hex[:10]}")
+    payload = {
+        "id": slide_id,
+        "title": body.payload.get("title") or "Untitled slide",
+        "section": body.payload.get("section") or "custom",
+        "template": body.payload.get("template") or "standard",
+        "podiumType": body.payload.get("podiumType") or "slide",
+        "participantMode": body.payload.get("participantMode") or "passive",
+        "body": body.payload.get("body") or "",
+        "bullets": body.payload.get("bullets") or [],
+        "durationSeconds": body.payload.get("durationSeconds") or 180,
+    }
+    if isinstance(body.payload.get("interaction"), dict):
+        payload["interaction"] = body.payload["interaction"]
+    row = await db.fetchrow(
+        """INSERT INTO presentation_slides (slide_id, position, payload)
+           VALUES ($1, coalesce((SELECT max(position)+1 FROM presentation_slides WHERE is_deleted=false), 0), $2::jsonb)
+           ON CONFLICT (slide_id)
+           DO UPDATE SET payload=excluded.payload, is_deleted=false, updated_at=now()
+           RETURNING slide_id, position, payload, updated_at""",
+        slide_id,
+        payload,
+    )
+    return {"slide": rowdict(row)}
+
+@app.put("/api/podium/slides/order")
+async def podium_reorder_slides(body: SlideOrderIn, key: str = Query(...)):
+    podium_auth(key)
+    async with (await db.pool()).acquire() as con:
+        async with con.transaction():
+            for index, slide_id in enumerate(body.slide_ids):
+                await con.execute(
+                    "UPDATE presentation_slides SET position=$2, updated_at=now() WHERE slide_id=$1 AND is_deleted=false",
+                    slide_id,
+                    index,
+                )
+    return {"ok": True}
+
 @app.patch("/api/podium/slides/{slide_id}")
 async def podium_save_slide_override(slide_id: str, body: SlideOverrideIn, key: str = Query(...)):
     podium_auth(key)
@@ -513,6 +598,11 @@ async def podium_save_slide_override(slide_id: str, body: SlideOverrideIn, key: 
            ON CONFLICT (slide_id)
            DO UPDATE SET payload=excluded.payload, updated_at=now()
            RETURNING *""",
+        slide_id,
+        body.payload,
+    )
+    await db.execute(
+        "UPDATE presentation_slides SET payload=payload || $2::jsonb, updated_at=now() WHERE slide_id=$1 AND is_deleted=false",
         slide_id,
         body.payload,
     )

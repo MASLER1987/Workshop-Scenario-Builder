@@ -15,12 +15,15 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn("participant_response_votes", db_source)
         self.assertIn("presentation_artifacts", db_source)
         self.assertIn("presentation_slide_overrides", db_source)
+        self.assertIn("presentation_slides", db_source)
         self.assertIn("/api/presentation/state", main_source)
         self.assertIn("/api/sessions/{sid}/responses", main_source)
         self.assertIn("/api/sessions/{sid}/responses/{response_id}/vote", main_source)
         self.assertIn("/api/podium/artifacts", main_source)
         self.assertIn("/api/podium/slide-overrides", main_source)
         self.assertIn("/api/podium/slides/{slide_id}", main_source)
+        self.assertIn("/api/podium/slides", main_source)
+        self.assertIn("/api/podium/slides/order", main_source)
         self.assertIn("TRUNCATE runs, instructions, sessions, participant_questions, participant_response_votes, participant_responses, presentation_artifacts", main_source)
 
     def test_presentation_definitions_include_passive_and_interactive_slices(self):
@@ -78,6 +81,11 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn("saveSlideOverride", source)
         self.assertIn("resetSlideOverride", source)
         self.assertIn("edit-slide-panel", source)
+        self.assertIn("deckSlides", source)
+        self.assertIn("renderSlideList", source)
+        self.assertIn("createBlankSlide", source)
+        self.assertIn("saveSlideOrder", source)
+        self.assertIn("slide-list-panel", source)
 
     def test_podium_join_box_uses_app_generated_qr_code(self):
         main_source = (ROOT / "app" / "main.py").read_text()
