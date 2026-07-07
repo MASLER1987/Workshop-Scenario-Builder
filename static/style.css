@@ -41,6 +41,8 @@ textarea.short{min-height:130px}
 .btn{border:0;border-radius:999px;padding:14px 18px;font-weight:800;cursor:pointer}
 .primary{background:var(--brand-mint);color:var(--brand-navy)}
 .secondary{background:#eef3f2;color:var(--brand-navy)}
+.danger{background:#ffe4e6;color:#9f1239}
+.danger.confirm-delete-slide{background:#be123c;color:white}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .drawer{position:fixed;left:0;right:0;bottom:0;background:white;border-radius:18px 18px 0 0;padding:22px;box-shadow:0 -12px 40px #19254322;z-index:6;max-height:75vh;overflow:auto}
 .close{float:right}

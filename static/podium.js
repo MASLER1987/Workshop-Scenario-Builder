@@ -256,10 +256,11 @@ function openSlideEditor(slide) {
   if (existing) existing.remove();
   const bullets = (slide.bullets || []).join("\n");
   const placeholder = slide.interaction?.placeholder || "";
-  document.body.insertAdjacentHTML("beforeend", `<aside class="edit-slide-panel"><form id="slide-edit-form"><header><div><span class="eyebrow">Slide editor</span><h2>${esc(slide.title)}</h2></div><button type="button" class="icon-close" id="close-editor" aria-label="Close">x</button></header><label>Section<input id="edit-section" maxlength="80" value="${esc(slide.section || "")}"></label><label>Title<input id="edit-title" maxlength="140" value="${esc(slide.title || "")}"></label><label>Body<textarea id="edit-body" rows="6">${esc(slide.body || "")}</textarea></label><label>Bullets<textarea id="edit-bullets" rows="5" placeholder="One bullet per line">${esc(bullets)}</textarea></label>${slide.interaction ? `<label>Phone prompt<textarea id="edit-placeholder" rows="3">${esc(placeholder)}</textarea></label>` : ""}<div class="edit-slide-actions"><button type="button" class="btn secondary" id="reset-slide-override">Reset default</button><button type="button" class="btn secondary" id="cancel-slide-edit">Cancel</button><button type="submit" class="btn primary">Save</button></div></form></aside>`);
+  document.body.insertAdjacentHTML("beforeend", `<aside class="edit-slide-panel"><form id="slide-edit-form"><header><div><span class="eyebrow">Slide editor</span><h2>${esc(slide.title)}</h2></div><button type="button" class="icon-close" id="close-editor" aria-label="Close">x</button></header><label>Section<input id="edit-section" maxlength="80" value="${esc(slide.section || "")}"></label><label>Title<input id="edit-title" maxlength="140" value="${esc(slide.title || "")}"></label><label>Body<textarea id="edit-body" rows="6">${esc(slide.body || "")}</textarea></label><label>Bullets<textarea id="edit-bullets" rows="5" placeholder="One bullet per line">${esc(bullets)}</textarea></label>${slide.interaction ? `<label>Phone prompt<textarea id="edit-placeholder" rows="3">${esc(placeholder)}</textarea></label>` : ""}<div class="edit-slide-actions"><button type="button" class="btn danger" id="delete-slide">Delete slide</button><button type="button" class="btn secondary" id="reset-slide-override">Reset default</button><button type="button" class="btn secondary" id="cancel-slide-edit">Cancel</button><button type="submit" class="btn primary">Save</button></div></form></aside>`);
   document.querySelector("#close-editor").onclick = closeSlideEditor;
   document.querySelector("#cancel-slide-edit").onclick = closeSlideEditor;
   document.querySelector("#reset-slide-override").onclick = () => resetSlideOverride(slide.id);
+  document.querySelector("#delete-slide").onclick = () => deleteSlide(slide.id);
   document.querySelector("#slide-edit-form").onsubmit = (event) => {
     event.preventDefault();
     saveSlideOverride(slide);
@@ -293,7 +294,7 @@ async function saveSlideOverride(slide) {
 }
 
 async function resetSlideOverride(slideId) {
-  await api(`/api/podium/slides/${encodeURIComponent(slideId)}`, { method: "DELETE" });
+  await api(`/api/podium/slide-overrides/${encodeURIComponent(slideId)}`, { method: "DELETE" });
   delete slideOverrides[slideId];
   const builtin = PRESENTATION_SLIDES.find((slide) => slide.id === slideId);
   if (builtin) {
@@ -302,6 +303,37 @@ async function resetSlideOverride(slideId) {
   }
   closeSlideEditor();
   renderPresentation();
+}
+
+async function deleteSlide(slideId) {
+  const button = document.querySelector("#delete-slide");
+  if (!button) return;
+  if (deckSlides.length <= 1) {
+    button.textContent = "Cannot delete last slide";
+    button.disabled = true;
+    return;
+  }
+  if (button.dataset.confirmed !== "true") {
+    button.dataset.confirmed = "true";
+    button.textContent = "Are you sure?";
+    button.classList.add("confirm-delete-slide");
+    return;
+  }
+  const activeId = currentSlide().id;
+  const deletedIndex = deckSlides.findIndex((slide) => slide.id === slideId);
+  if (deletedIndex < 0) return;
+  await persistCurrentDeck();
+  await api(`/api/podium/slides/${encodeURIComponent(slideId)}`, { method: "DELETE" });
+  deckSlides = deckSlides.filter((slide) => slide.id !== slideId);
+  delete slideOverrides[slideId];
+  if (activeId === slideId) {
+    selectedSlideIndex = Math.min(deletedIndex, deckSlides.length - 1);
+  } else {
+    selectedSlideIndex = Math.max(0, deckSlides.findIndex((slide) => slide.id === activeId));
+  }
+  closeSlideEditor();
+  closeSlideList();
+  await activateSlide(selectedSlideIndex);
 }
 
 function renderStandardSlide(slide) {

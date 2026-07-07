@@ -618,10 +618,47 @@ async def podium_save_slide_override(slide_id: str, body: SlideOverrideIn, key: 
     )
     return {"override": rowdict(row)}
 
-@app.delete("/api/podium/slides/{slide_id}")
+@app.delete("/api/podium/slide-overrides/{slide_id}")
 async def podium_delete_slide_override(slide_id: str, key: str = Query(...)):
     podium_auth(key)
     await db.execute("DELETE FROM presentation_slide_overrides WHERE slide_id=$1", slide_id)
+    return {"ok": True}
+
+@app.delete("/api/podium/slides/{slide_id}")
+async def podium_delete_slide(slide_id: str, key: str = Query(...)):
+    podium_auth(key)
+    async with (await db.pool()).acquire() as con:
+        async with con.transaction():
+            await con.execute("DELETE FROM presentation_slide_overrides WHERE slide_id=$1", slide_id)
+            await con.execute(
+                "UPDATE presentation_slides SET is_deleted=true, updated_at=now() WHERE slide_id=$1",
+                slide_id,
+            )
+            state = await con.fetchrow("SELECT active_slide_id FROM presentation_state WHERE id=1")
+            if state and state["active_slide_id"] == slide_id:
+                next_slide = await con.fetchrow(
+                    """SELECT slide_id, payload
+                       FROM presentation_slides
+                       WHERE is_deleted=false
+                       ORDER BY position, created_at
+                       LIMIT 1"""
+                )
+                if next_slide:
+                    payload = next_slide["payload"] if isinstance(next_slide["payload"], dict) else {}
+                    mode = payload.get("participantMode") or SLIDE_MODES.get(next_slide["slide_id"], "passive")
+                    await con.execute(
+                        """UPDATE presentation_state
+                           SET active_slide_id=$1, active_mode=$2, updated_at=now()
+                           WHERE id=1""",
+                        next_slide["slide_id"],
+                        mode,
+                    )
+                else:
+                    await con.execute(
+                        """UPDATE presentation_state
+                           SET active_slide_id='welcome', active_mode='passive', updated_at=now()
+                           WHERE id=1"""
+                    )
     return {"ok": True}
 
 @app.get("/api/podium/scenarios")
