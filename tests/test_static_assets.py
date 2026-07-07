@@ -41,6 +41,13 @@ class StaticAssetTests(unittest.TestCase):
         self.assertIn('event.type === "status"', script)
         self.assertIn("state.notice = event.text", script)
 
+    def test_profile_screen_introduces_workshop_outcomes(self):
+        script = (ROOT / "static" / "app.js").read_text()
+
+        self.assertIn("Learn about legal technology careers", script)
+        self.assertIn("Learn how we build", script)
+        self.assertIn("Get hands on with AI", script)
+
     def test_podium_renders_score_panel_and_best_scores(self):
         script = (ROOT / "static" / "podium.js").read_text()
 

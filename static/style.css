@@ -18,6 +18,11 @@ textarea{min-height:68vh;resize:vertical}
 textarea.short{min-height:130px}
 
 .phone{max-width:520px;margin:0 auto;min-height:100vh;background:white;padding:20px 18px 96px}
+.profile-intro h1{font-size:42px;margin:4px 0 10px}
+.profile-intro label{display:block;font-weight:900;margin:22px 0 8px}
+.outcomes{list-style:none;margin:22px 0;padding:0;display:grid;gap:10px;counter-reset:outcome}
+.outcomes li{counter-increment:outcome;display:grid;grid-template-columns:38px 1fr;gap:10px;align-items:center;background:#f8fafc;border:1px solid var(--line-soft);border-radius:8px;padding:12px}
+.outcomes li::before{content:counter(outcome);display:grid;place-items:center;width:32px;height:32px;border-radius:999px;background:var(--accent);color:white;font-weight:900}
 .top{display:flex;justify-content:space-between;gap:12px;align-items:center}
 .badge,.tag{font-size:13px;color:#344054;background:#eef2ff;border-radius:999px;padding:4px 10px}
 .bar{position:fixed;left:50%;bottom:0;transform:translateX(-50%);max-width:520px;width:100%;display:flex;gap:10px;padding:14px 18px;background:rgba(255,255,255,.95);box-shadow:0 -8px 24px #0001}
