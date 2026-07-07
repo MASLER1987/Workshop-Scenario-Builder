@@ -2,9 +2,10 @@ import asyncio
 import os
 import uuid
 from contextlib import asynccontextmanager
+from io import BytesIO
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -52,6 +53,9 @@ class ArtifactIn(BaseModel):
     artifact_type: str = Field(min_length=1, max_length=60)
     payload: dict = Field(default_factory=dict)
 
+class SlideOverrideIn(BaseModel):
+    payload: dict = Field(default_factory=dict)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.connect(); await db.init_db()
@@ -82,6 +86,7 @@ SLIDE_MODES = {
     "process-map": "process",
     "process-inspection": "passive",
     "debrief": "passive",
+    "qna-review": "qna",
     "careers-wrap": "qna",
 }
 
@@ -97,6 +102,14 @@ async def captured_requirements() -> dict | None:
         "SELECT payload FROM presentation_artifacts WHERE slide_id='requirements-gathering' AND artifact_type='captured_requirements'"
     )
     return row["payload"] if row else None
+
+async def slide_interaction_payload(slide_id: str) -> dict:
+    interaction = slide_interaction_config(slide_id)
+    row = await db.fetchrow("SELECT payload FROM presentation_slide_overrides WHERE slide_id=$1", slide_id)
+    override = row["payload"] if row else {}
+    if isinstance(override, dict) and isinstance(override.get("interaction"), dict):
+        interaction = {**interaction, **override["interaction"]}
+    return interaction
 
 async def require_session(sid: uuid.UUID):
     s = await db.fetchrow("SELECT * FROM sessions WHERE id=$1", sid)
@@ -144,6 +157,25 @@ async def podium(key: str | None = None):
 @app.get("/health")
 async def health(): return {"ok": True}
 
+@app.get("/api/qr")
+async def qr_code(text: str = Query(..., min_length=1, max_length=500)):
+    import qrcode
+    import qrcode.image.svg
+
+    image = qrcode.make(
+        text,
+        image_factory=qrcode.image.svg.SvgPathImage,
+        border=2,
+        box_size=12,
+    )
+    buffer = BytesIO()
+    image.save(buffer)
+    return Response(
+        content=buffer.getvalue(),
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
 @app.get("/api/presentation/state")
 async def presentation_state():
     row = await db.fetchrow("SELECT * FROM presentation_state WHERE id=1")
@@ -157,7 +189,7 @@ async def presentation_state():
         "active_slide_id": slide_id,
         "participant_mode": mode,
         "is_frozen": row["is_frozen"],
-        "interaction": slide_interaction_config(slide_id),
+        "interaction": await slide_interaction_payload(slide_id),
         "captured_requirements": requirements,
         "updated_at": row["updated_at"],
     }
@@ -465,6 +497,32 @@ async def podium_save_artifact(body: ArtifactIn, key: str = Query(...)):
         body.payload,
     )
     return {"artifact": rowdict(row)}
+
+@app.get("/api/podium/slide-overrides")
+async def podium_slide_overrides(key: str = Query(...)):
+    podium_auth(key)
+    rows = await db.fetch("SELECT * FROM presentation_slide_overrides ORDER BY updated_at DESC")
+    return [dict(r) for r in rows]
+
+@app.patch("/api/podium/slides/{slide_id}")
+async def podium_save_slide_override(slide_id: str, body: SlideOverrideIn, key: str = Query(...)):
+    podium_auth(key)
+    row = await db.fetchrow(
+        """INSERT INTO presentation_slide_overrides (slide_id, payload)
+           VALUES ($1,$2::jsonb)
+           ON CONFLICT (slide_id)
+           DO UPDATE SET payload=excluded.payload, updated_at=now()
+           RETURNING *""",
+        slide_id,
+        body.payload,
+    )
+    return {"override": rowdict(row)}
+
+@app.delete("/api/podium/slides/{slide_id}")
+async def podium_delete_slide_override(slide_id: str, key: str = Query(...)):
+    podium_auth(key)
+    await db.execute("DELETE FROM presentation_slide_overrides WHERE slide_id=$1", slide_id)
+    return {"ok": True}
 
 @app.get("/api/podium/scenarios")
 async def scenarios(key: str = Query(...)):

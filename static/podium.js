@@ -8,7 +8,9 @@ let sortMode = "leaderboard";
 let viewMode = "presentation";
 let presentationState = null;
 let responses = [];
+let questions = [];
 let artifacts = [];
+let slideOverrides = {};
 let selectedSlideIndex = 0;
 
 const api = (u, o = {}) =>
@@ -32,6 +34,7 @@ async function load() {
   scenarios = await api("/api/podium/scenarios");
   summary = await api("/api/podium/summary");
   presentationState = await api("/api/podium/presentation");
+  await loadSlideOverrides();
   selectedSlideIndex = Math.max(0, PRESENTATION_SLIDES.findIndex((slide) => slide.id === presentationState.active_slide_id));
   if (viewMode === "grid") renderGrid();
   else renderPresentation();
@@ -42,13 +45,42 @@ async function loadResponses(slideId) {
   artifacts = await api(`/api/podium/artifacts?slide_id=${encodeURIComponent(slideId)}`);
 }
 
-function currentSlide() {
+async function loadQuestions() {
+  questions = await api("/api/podium/questions");
+}
+
+async function loadSlideOverrides() {
+  const rows = await api("/api/podium/slide-overrides");
+  slideOverrides = Object.fromEntries(rows.map((row) => [row.slide_id, row.payload || {}]));
+}
+
+function baseSlide() {
   return PRESENTATION_SLIDES[selectedSlideIndex] || PRESENTATION_SLIDES[0];
+}
+
+function effectiveSlide(slide = baseSlide()) {
+  const override = slideOverrides[slide.id] || {};
+  const interaction = slide.interaction || override.interaction
+    ? { ...(slide.interaction || {}), ...(override.interaction || {}) }
+    : undefined;
+  const merged = {
+    ...slide,
+    ...override,
+    id: slide.id,
+    template: slide.template,
+    participantMode: slide.participantMode,
+  };
+  if (interaction) merged.interaction = interaction;
+  return merged;
+}
+
+function currentSlide() {
+  return effectiveSlide(baseSlide());
 }
 
 async function activateSlide(index) {
   selectedSlideIndex = Math.max(0, Math.min(PRESENTATION_SLIDES.length - 1, index));
-  const slide = currentSlide();
+  const slide = baseSlide();
   await api("/api/podium/presentation/activate", {
     method: "POST",
     body: JSON.stringify({ slide_id: slide.id, mode: slide.participantMode }),
@@ -70,26 +102,39 @@ function qrUrl() {
   return location.origin + "/";
 }
 
+function qrImageUrl() {
+  return `/api/qr?text=${encodeURIComponent(qrUrl())}`;
+}
+
 async function renderPresentation() {
   const slide = currentSlide();
-  if (slide.participantMode === "requirements" || slide.participantMode === "process") {
+  if (slide.template === "requirements-capture" || slide.template === "workflow-capture") {
     await loadResponses(slide.id);
   }
-  if (slide.id === "requirements-gathering") {
-    renderRequirementsSlide(slide);
-  } else if (slide.id === "process-map") {
-    renderProcessSlide(slide);
-  } else if (slide.id === "baseline-results") {
-    renderLiveSlide(slide);
-  } else {
-    renderStandardSlide(slide);
+  if (slide.template === "qna-review") {
+    await loadQuestions();
   }
+  renderByTemplate(slide);
+}
+
+function renderByTemplate(slide) {
+  const renderers = {
+    standard: renderStandardSlide,
+    interaction: renderInteractionSlide,
+    "qna-review": renderQnaReviewSlide,
+    "requirements-capture": renderRequirementsSlide,
+    "workflow-capture": renderProcessSlide,
+    "bot-results": renderLiveSlide,
+  };
+  (renderers[slide.template] || renderStandardSlide)(slide);
 }
 
 function slideShell(slide, body) {
-  app.innerHTML = `<div class="podium-shell presentation-shell"><header class="presentation-top"><div><p class="eyebrow">${esc(slide.section)}</p><h1>${esc(slide.title)}</h1></div><div class="join-box"><span>Join</span><strong>${esc(qrUrl())}</strong></div></header>${body}<footer class="presentation-controls"><button class="btn secondary" id="prev">Back</button><span>${selectedSlideIndex + 1} / ${PRESENTATION_SLIDES.length}</span><button class="btn primary" id="next">Next</button><button class="btn secondary" id="grid">Live grid</button><button class="btn secondary" id="reset">Reset</button></footer></div>`;
+  const edited = slideOverrides[slide.id] ? '<span class="badge edited-badge">Edited</span>' : "";
+  app.innerHTML = `<div class="podium-shell presentation-shell template-${esc(slide.template || "standard")}"><header class="presentation-top"><div><p class="eyebrow">${esc(slide.section)}</p><h1>${esc(slide.title)}</h1>${edited}</div><div class="join-box"><img class="qr-code" src="${esc(qrImageUrl())}" alt="QR code for participant app"><div><span>Join</span><strong>${esc(qrUrl())}</strong></div></div></header>${body}<footer class="presentation-controls"><button class="btn secondary" id="prev">Back</button><span>${selectedSlideIndex + 1} / ${PRESENTATION_SLIDES.length}</span><button class="btn primary" id="next">Next</button><button class="btn secondary" id="edit-slide">Edit slide</button><button class="btn secondary" id="grid">Live grid</button><button class="btn secondary" id="reset">Reset</button></footer></div>`;
   document.querySelector("#prev").onclick = () => activateSlide(selectedSlideIndex - 1);
   document.querySelector("#next").onclick = () => activateSlide(selectedSlideIndex + 1);
+  document.querySelector("#edit-slide").onclick = () => openSlideEditor(slide);
   document.querySelector("#grid").onclick = () => {
     viewMode = "grid";
     renderGrid();
@@ -97,18 +142,87 @@ function slideShell(slide, body) {
   document.querySelector("#reset").onclick = () => confirm("Wipe workshop data?") && api("/api/podium/reset", { method: "POST" }).then(load);
 }
 
+function openSlideEditor(slide) {
+  const existing = document.querySelector(".edit-slide-panel");
+  if (existing) existing.remove();
+  const bullets = (slide.bullets || []).join("\n");
+  const placeholder = slide.interaction?.placeholder || "";
+  document.body.insertAdjacentHTML("beforeend", `<aside class="edit-slide-panel"><form id="slide-edit-form"><header><div><span class="eyebrow">Slide editor</span><h2>${esc(slide.title)}</h2></div><button type="button" class="icon-close" id="close-editor" aria-label="Close">x</button></header><label>Section<input id="edit-section" maxlength="80" value="${esc(slide.section || "")}"></label><label>Title<input id="edit-title" maxlength="140" value="${esc(slide.title || "")}"></label><label>Body<textarea id="edit-body" rows="6">${esc(slide.body || "")}</textarea></label><label>Bullets<textarea id="edit-bullets" rows="5" placeholder="One bullet per line">${esc(bullets)}</textarea></label>${slide.interaction ? `<label>Phone prompt<textarea id="edit-placeholder" rows="3">${esc(placeholder)}</textarea></label>` : ""}<div class="edit-slide-actions"><button type="button" class="btn secondary" id="reset-slide-override">Reset default</button><button type="button" class="btn secondary" id="cancel-slide-edit">Cancel</button><button type="submit" class="btn primary">Save</button></div></form></aside>`);
+  document.querySelector("#close-editor").onclick = closeSlideEditor;
+  document.querySelector("#cancel-slide-edit").onclick = closeSlideEditor;
+  document.querySelector("#reset-slide-override").onclick = () => resetSlideOverride(slide.id);
+  document.querySelector("#slide-edit-form").onsubmit = (event) => {
+    event.preventDefault();
+    saveSlideOverride(slide);
+  };
+}
+
+function closeSlideEditor() {
+  document.querySelector(".edit-slide-panel")?.remove();
+}
+
+async function saveSlideOverride(slide) {
+  const bulletLines = document.querySelector("#edit-bullets").value.split("\n").map((line) => line.trim()).filter(Boolean);
+  const payload = {
+    section: document.querySelector("#edit-section").value.trim(),
+    title: document.querySelector("#edit-title").value.trim(),
+    body: document.querySelector("#edit-body").value.trim(),
+    bullets: bulletLines,
+  };
+  const placeholder = document.querySelector("#edit-placeholder");
+  if (placeholder && slide.interaction) {
+    payload.interaction = { placeholder: placeholder.value.trim() };
+  }
+  await api(`/api/podium/slides/${encodeURIComponent(slide.id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ payload }),
+  });
+  slideOverrides[slide.id] = payload;
+  closeSlideEditor();
+  renderPresentation();
+}
+
+async function resetSlideOverride(slideId) {
+  await api(`/api/podium/slides/${encodeURIComponent(slideId)}`, { method: "DELETE" });
+  delete slideOverrides[slideId];
+  closeSlideEditor();
+  renderPresentation();
+}
+
 function renderStandardSlide(slide) {
   const bullets = (slide.bullets || []).map((item) => `<li>${esc(item)}</li>`).join("");
-  slideShell(slide, `<section class="presentation-card"><p>${esc(slide.body || "")}</p>${bullets ? `<ul>${bullets}</ul>` : ""}<div class="phone-mode">Phone: ${esc(slide.participantMode)}</div></section>`);
+  slideShell(slide, `<section class="presentation-card standard-slide"><p>${esc(slide.body || "")}</p>${bullets ? `<ul>${bullets}</ul>` : ""}</section>`);
+}
+
+function renderInteractionSlide(slide) {
+  const totalRuns = summary?.total_runs || 0;
+  const tested = sessions.filter((session) => Number(session.run_count) > 0).length;
+  const captured = artifacts.find((item) => item.artifact_type === "captured_requirements")?.payload?.items || [];
+  const capturedHtml = captured.length ? `<div class="mini-requirements"><h3>Class requirements</h3><ul>${captured.map((item) => `<li>${esc(item.text || item)}</li>`).join("")}</ul></div>` : "";
+  slideShell(slide, `<section class="presentation-card interaction-slide"><div><p>${esc(slide.body || "")}</p><div class="activity-metrics"><span><b>${sessions.length}</b> joined</span><span><b>${tested}</b> tested</span><span><b>${totalRuns}</b> total runs</span></div>${capturedHtml}</div><div class="activity-callout"><strong>Phone task</strong><p>${slide.participantMode === "bot" ? "Open the bot builder on your phone." : "Follow the prompt on your phone."}</p></div></section>`);
 }
 
 function renderLiveSlide(slide) {
-  slideShell(slide, `${summaryStrip()}<div class="sortbar"><button class="btn ${sortMode === "leaderboard" ? "primary" : "secondary"}" data-sort="leaderboard">Leaderboard</button><button class="btn ${sortMode === "improved" ? "primary" : "secondary"}" data-sort="improved">Most improved</button></div><section class="grid">${sortedSessions().map(card).join("")}</section>`);
+  slideShell(slide, `<section class="bot-results-view">${summaryStrip()}<div class="sortbar"><button class="btn ${sortMode === "leaderboard" ? "primary" : "secondary"}" data-sort="leaderboard">Leaderboard</button><button class="btn ${sortMode === "improved" ? "primary" : "secondary"}" data-sort="improved">Most improved</button></div><section class="grid">${sortedSessions().map(card).join("")}</section></section>`);
   document.querySelectorAll(".card").forEach((c) => (c.onclick = () => openDetail(c.dataset.id)));
   document.querySelectorAll("[data-sort]").forEach((b) => (b.onclick = () => {
     sortMode = b.dataset.sort;
     renderPresentation();
   }));
+}
+
+function renderQnaReviewSlide(slide) {
+  const visibleQuestions = questions.filter((question) => !question.is_answered);
+  const archivedCount = questions.length - visibleQuestions.length;
+  const list = visibleQuestions.map((question) => `<article class="question-card"><div><p>${esc(question.text)}</p><small>${esc(question.display_name || "Participant")}</small></div><button class="btn primary" data-archive-question="${question.id}">Tick</button></article>`).join("");
+  slideShell(slide, `<section class="qna-review"><div class="qna-summary"><p>${esc(slide.body || "")}</p><strong>${visibleQuestions.length}</strong><span>open questions</span><em>${archivedCount} archived</em></div><div class="question-list">${list || '<p class="muted">No open questions yet.</p>'}</div></section>`);
+  document.querySelectorAll("[data-archive-question]").forEach((button) => (button.onclick = () => archiveQuestion(button.dataset.archiveQuestion)));
+}
+
+async function archiveQuestion(questionId) {
+  await api(`/api/podium/questions/${questionId}/answered`, { method: "POST" });
+  await loadQuestions();
+  renderPresentation();
 }
 
 function capturedRequirements() {
@@ -119,17 +233,29 @@ function renderRequirementsSlide(slide) {
   const captured = capturedRequirements();
   const incoming = responses.map((r) => `<article class="idea-card" draggable="true" data-response="${r.id}"><p>${esc(r.payload?.text || "")}</p><button class="btn secondary" data-capture="${r.id}">Capture</button></article>`).join("");
   const capturedHtml = captured.map((item, index) => `<li><span>${esc(item.text || item)}</span><button class="btn secondary" data-remove-req="${index}">Remove</button></li>`).join("");
-  slideShell(slide, `<div class="curation-layout"><section><h2>Incoming ideas</h2><div class="idea-pool">${incoming || '<p class="muted">Waiting for student ideas...</p>'}</div></section><section class="captured-requirements"><h2>Captured requirements</h2><ol id="captured-list">${capturedHtml}</ol><p class="muted">These appear in the phone brief for the second bot round.</p></section></div>`);
-  document.querySelectorAll("[data-capture]").forEach((button) => (button.onclick = () => {
-    const item = responses.find((r) => r.id === button.dataset.capture);
-    if (!item) return;
-    const next = [...captured, { text: item.payload?.text || "" }];
-    saveArtifact(slide.id, "captured_requirements", { items: next });
-  }));
+  slideShell(slide, `<div class="curation-layout"><section><h2>Incoming ideas</h2><div class="idea-pool">${incoming || '<p class="muted">Waiting for student ideas...</p>'}</div></section><section class="captured-requirements drop-zone" data-requirements-drop="true"><h2>Captured requirements</h2><ol id="captured-list">${capturedHtml}</ol><p class="muted">Drag useful ideas here. These appear in the phone brief for the second bot round.</p></section></div>`);
+  document.querySelectorAll("[data-capture]").forEach((button) => (button.onclick = () => captureRequirementResponse(slide.id, button.dataset.capture)));
   document.querySelectorAll("[data-remove-req]").forEach((button) => (button.onclick = () => {
     const next = captured.filter((_, index) => index !== Number(button.dataset.removeReq));
     saveArtifact(slide.id, "captured_requirements", { items: next });
   }));
+  bindDraggableIdeas();
+  const dropZone = document.querySelector("[data-requirements-drop]");
+  if (dropZone) {
+    dropZone.ondragover = allowDrop;
+    dropZone.ondrop = (event) => {
+      event.preventDefault();
+      captureRequirementResponse(slide.id, event.dataTransfer.getData("text/plain"));
+    };
+  }
+}
+
+function captureRequirementResponse(slideId, responseId) {
+  const captured = capturedRequirements();
+  const item = responses.find((r) => r.id === responseId);
+  if (!item) return;
+  const next = [...captured, { text: item.payload?.text || "" }];
+  saveArtifact(slideId, "captured_requirements", { items: next });
 }
 
 function processMap() {
@@ -144,15 +270,38 @@ function processMap() {
 
 function renderProcessSlide(slide) {
   const stages = processMap();
-  const ideas = responses.map((r) => `<article class="idea-card"><strong>${r.votes || 0} votes</strong><p>${esc(r.payload?.text || "")}</p>${stages.map((stage, index) => `<button class="btn secondary" data-stage="${index}" data-response="${r.id}">${esc(stage.title)}</button>`).join("")}</article>`).join("");
-  const board = stages.map((stage) => `<section class="stage"><h3>${esc(stage.title)}</h3>${(stage.items || []).map((item) => `<p>${esc(item.text || item)}</p>`).join("")}</section>`).join("");
+  const ideas = responses.map((r) => `<article class="idea-card" draggable="true" data-response="${r.id}"><strong>${r.votes || 0} votes</strong><p>${esc(r.payload?.text || "")}</p>${stages.map((stage, index) => `<button class="btn secondary" data-stage="${index}" data-response="${r.id}">${esc(stage.title)}</button>`).join("")}</article>`).join("");
+  const board = stages.map((stage, index) => `<section class="stage drop-zone" data-stage-drop="${index}"><h3>${esc(stage.title)}</h3>${(stage.items || []).map((item) => `<p>${esc(item.text || item)}</p>`).join("")}</section>`).join("");
   slideShell(slide, `<div class="curation-layout"><section><h2>Stage suggestions</h2><div class="idea-pool">${ideas || '<p class="muted">Waiting for process-stage ideas...</p>'}</div></section><section><h2>Process stage board</h2><div class="process-stage-board">${board}</div></section></div>`);
   document.querySelectorAll("[data-stage]").forEach((button) => (button.onclick = () => {
-    const item = responses.find((r) => r.id === button.dataset.response);
-    if (!item) return;
-    const next = stages.map((stage, index) => index === Number(button.dataset.stage) ? { ...stage, items: [...(stage.items || []), { text: item.payload?.text || "" }] } : stage);
-    saveArtifact(slide.id, "process_stage_map", { stages: next });
+    addProcessItemToStage(slide.id, Number(button.dataset.stage), button.dataset.response);
   }));
+  bindDraggableIdeas();
+  document.querySelectorAll("[data-stage-drop]").forEach((zone) => {
+    zone.ondragover = allowDrop;
+    zone.ondrop = (event) => {
+      event.preventDefault();
+      addProcessItemToStage(slide.id, Number(zone.dataset.stageDrop), event.dataTransfer.getData("text/plain"));
+    };
+  });
+}
+
+function addProcessItemToStage(slideId, stageIndex, responseId) {
+  const stages = processMap();
+  const item = responses.find((r) => r.id === responseId);
+  if (!item) return;
+  const next = stages.map((stage, index) => index === stageIndex ? { ...stage, items: [...(stage.items || []), { text: item.payload?.text || "" }] } : stage);
+  saveArtifact(slideId, "process_stage_map", { stages: next });
+}
+
+function bindDraggableIdeas() {
+  document.querySelectorAll("[draggable][data-response]").forEach((card) => {
+    card.ondragstart = (event) => event.dataTransfer.setData("text/plain", card.dataset.response);
+  });
+}
+
+function allowDrop(event) {
+  event.preventDefault();
 }
 
 function sortedSessions() {

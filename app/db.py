@@ -103,6 +103,11 @@ async def init_db() -> None:
           updated_at TIMESTAMPTZ DEFAULT now(),
           UNIQUE (slide_id, artifact_type)
         );
+        CREATE TABLE IF NOT EXISTS presentation_slide_overrides (
+          slide_id TEXT PRIMARY KEY,
+          payload JSONB NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT now()
+        );
         CREATE UNIQUE INDEX IF NOT EXISTS one_active_scenario ON scenarios ((is_active)) WHERE is_active;
         """)
         await con.execute(
