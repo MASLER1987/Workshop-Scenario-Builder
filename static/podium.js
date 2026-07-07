@@ -155,7 +155,10 @@ function slideShell(slide, body) {
 function renderSlideList() {
   closeSlideEditor();
   document.querySelector(".slide-list-panel")?.remove();
-  const rows = deckSlides.map((slide, index) => `<article class="slide-row ${index === selectedSlideIndex ? "selected" : ""}" draggable="true" data-slide-id="${esc(slide.id)}"><span class="drag-handle">::</span><button class="slide-row-main" data-go-slide="${index}"><strong>${index + 1}. ${esc(slide.title || "Untitled slide")}</strong><small>${esc(slide.section || "slide")} · ${esc(slide.template || "standard")} · phone: ${esc(slide.participantMode || "passive")}</small></button><button class="btn secondary" data-edit-row="${index}">Edit</button></article>`).join("");
+  const rows = deckSlides.map((slide, index) => {
+    const isLive = index === selectedSlideIndex;
+    return `<article class="slide-row ${isLive ? "selected" : ""}" draggable="true" data-slide-id="${esc(slide.id)}"><span class="drag-handle">::</span><button class="quick-nav-arrow" data-go-slide="${index}" aria-label="Go to slide ${index + 1}">-></button><button class="slide-row-main" data-go-slide="${index}"><strong>${index + 1}. ${esc(slide.title || "Untitled slide")}${isLive ? '<span class="live-slide-pill">Live</span>' : ""}</strong><small>${esc(slide.section || "slide")} · ${esc(slide.template || "standard")} · phone: ${esc(slide.participantMode || "passive")}</small></button><button class="btn secondary" data-edit-row="${index}">Edit</button></article>`;
+  }).join("");
   document.body.insertAdjacentHTML("beforeend", `<aside class="slide-list-panel"><header><div><span class="eyebrow">Deck</span><h2>Slide list</h2></div><button type="button" class="icon-close" id="close-slide-list" aria-label="Close">x</button></header><div class="slide-list-actions"><button class="btn primary" id="new-slide">New slide</button><span>${deckPersisted ? "Saved in Railway" : "Using bundled deck"}</span></div><div class="slide-rows">${rows}</div></aside>`);
   document.querySelector("#close-slide-list").onclick = closeSlideList;
   document.querySelector("#new-slide").onclick = createBlankSlide;

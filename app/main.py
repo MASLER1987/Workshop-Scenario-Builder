@@ -120,6 +120,15 @@ async def slide_interaction_payload(slide_id: str) -> dict:
         interaction = {**interaction, **override["interaction"]}
     return interaction
 
+async def active_slide_payload(slide_id: str) -> dict | None:
+    row = await db.fetchrow("SELECT payload FROM presentation_slides WHERE slide_id=$1 AND is_deleted=false", slide_id)
+    payload = row["payload"] if row else None
+    override_row = await db.fetchrow("SELECT payload FROM presentation_slide_overrides WHERE slide_id=$1", slide_id)
+    override = override_row["payload"] if override_row else {}
+    if isinstance(payload, dict) and isinstance(override, dict):
+        return {**payload, **override}
+    return payload if isinstance(payload, dict) else None
+
 async def require_session(sid: uuid.UUID):
     s = await db.fetchrow("SELECT * FROM sessions WHERE id=$1", sid)
     if not s:
@@ -199,6 +208,7 @@ async def presentation_state():
         "participant_mode": mode,
         "is_frozen": row["is_frozen"],
         "interaction": await slide_interaction_payload(slide_id),
+        "active_slide": await active_slide_payload(slide_id),
         "captured_requirements": requirements,
         "updated_at": row["updated_at"],
     }

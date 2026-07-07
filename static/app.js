@@ -206,7 +206,7 @@ function renderTranscript() {
 }
 
 function renderCompanion(mode) {
-  const slide = typeof presentationSlide === "function" ? presentationSlide(state.presentation?.active_slide_id) : null;
+  const slide = activeSlide();
   if (mode === "requirements") {
     renderRequirements(slide);
   } else if (mode === "process") {
@@ -218,13 +218,21 @@ function renderCompanion(mode) {
   }
 }
 
+function activeSlide() {
+  return state.presentation?.active_slide || (typeof presentationSlide === "function" ? presentationSlide(state.presentation?.active_slide_id) : null);
+}
+
+function activeSlideBanner(slide, label = "Live slide") {
+  return `<div class="active-slide-banner"><span>${esc(label)}</span><strong>${esc(slide?.title || "Workshop")}</strong></div>`;
+}
+
 function renderPassive(slide) {
-  app.innerHTML = `<div class="top"><strong>${esc(state.name)}</strong><span class="badge">Connected</span></div><section class="companion"><p class="eyebrow">On screen</p><h1>${esc(slide?.title || "Workshop")}</h1><p>${esc(slide?.body || "Watch the screen. You can ask a question at any time.")}</p><button class="btn secondary" id="qna">Ask a question</button></section>`;
+  app.innerHTML = `<div class="top"><strong>${esc(state.name)}</strong><span class="badge">Connected</span></div>${activeSlideBanner(slide)}<section class="companion"><p class="eyebrow">On screen</p><h1>${esc(slide?.title || "Workshop")}</h1><p>${esc(slide?.body || "Watch the screen. You can ask a question at any time.")}</p><button class="btn secondary" id="qna">Ask a question</button></section>`;
   $("#qna").onclick = () => renderQna(slide);
 }
 
 function renderQna(slide) {
-  app.innerHTML = `<div class="top"><strong>${esc(state.name)}</strong><span class="badge">Q&A</span></div><section class="companion"><p class="eyebrow">On screen</p><h1>${esc(slide?.title || "Questions")}</h1><p class="muted">Ask a question for the presenters.</p><textarea id="question" maxlength="500" class="short" placeholder="Type your question..."></textarea><p><button class="btn primary" id="send-question">Send question</button></p>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</section>`;
+  app.innerHTML = `<div class="top"><strong>${esc(state.name)}</strong><span class="badge">Q&A</span></div>${activeSlideBanner(slide)}<section class="companion"><p class="eyebrow">On screen</p><h1>${esc(slide?.title || "Questions")}</h1><p class="muted">Ask a question for the presenters.</p><textarea id="question" maxlength="500" class="short" placeholder="Type your question..."></textarea><p><button class="btn primary" id="send-question">Send question</button></p>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</section>`;
   $("#send-question").onclick = submitQuestion;
 }
 
@@ -233,17 +241,17 @@ async function submitQuestion() {
   if (!text) return;
   await api(`/api/sessions/${state.sid}/questions`, { method: "POST", body: JSON.stringify({ text }) });
   state.notice = "Question sent.";
-  renderQna(typeof presentationSlide === "function" ? presentationSlide(state.presentation?.active_slide_id) : null);
+  renderQna(activeSlide());
 }
 
 function renderRequirements(slide) {
-  app.innerHTML = `<div class="top"><strong>${esc(state.name)}</strong><span class="badge">Requirements</span></div><section class="companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "What matters for intake?")}</h1><p>Suggest something the bot should collect, avoid, or explain.</p><textarea id="response" maxlength="160" class="short" placeholder="${esc(state.presentation?.interaction?.placeholder || "Your idea...")}"></textarea><p><button class="btn primary" id="send-response">Send idea</button></p>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</section>`;
+  app.innerHTML = `<div class="top"><strong>${esc(state.name)}</strong><span class="badge">Requirements</span></div>${activeSlideBanner(slide, "Interactive now")}<section class="companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "What matters for intake?")}</h1><p>Suggest something the bot should collect, avoid, or explain.</p><textarea id="response" maxlength="160" class="short" placeholder="${esc(state.presentation?.interaction?.placeholder || "Your idea...")}"></textarea><p><button class="btn primary" id="send-response">Send idea</button></p>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</section>`;
   $("#send-response").onclick = () => submitResponse("requirements");
 }
 
 function renderProcess(slide) {
   const suggestions = (state.responses || []).map((item) => `<li><button class="vote" data-vote="${item.id}">+${item.votes || 0}</button><span>${esc(item.payload?.text || "")}</span></li>`).join("");
-  app.innerHTML = `<div class="top"><strong>${esc(state.name)}</strong><span class="badge">Process map</span></div><section class="companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "Matter intake stages")}</h1><p>Suggest a stage, or upvote one that looks useful.</p><textarea id="response" maxlength="100" class="short" placeholder="${esc(state.presentation?.interaction?.placeholder || "Suggest a stage...")}"></textarea><p><button class="btn primary" id="send-response">Send stage</button></p><ul class="phone-list">${suggestions}</ul>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</section>`;
+  app.innerHTML = `<div class="top"><strong>${esc(state.name)}</strong><span class="badge">Process map</span></div>${activeSlideBanner(slide, "Interactive now")}<section class="companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "Matter intake stages")}</h1><p>Suggest a stage, or upvote one that looks useful.</p><textarea id="response" maxlength="100" class="short" placeholder="${esc(state.presentation?.interaction?.placeholder || "Suggest a stage...")}"></textarea><p><button class="btn primary" id="send-response">Send stage</button></p><ul class="phone-list">${suggestions}</ul>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</section>`;
   $("#send-response").onclick = () => submitResponse("process");
   document.querySelectorAll("[data-vote]").forEach((button) => (button.onclick = () => voteResponse(button.dataset.vote)));
 }

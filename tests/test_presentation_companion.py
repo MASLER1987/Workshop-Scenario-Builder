@@ -24,6 +24,7 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn("/api/podium/slides/{slide_id}", main_source)
         self.assertIn("/api/podium/slides", main_source)
         self.assertIn("/api/podium/slides/order", main_source)
+        self.assertIn("active_slide_payload", main_source)
         self.assertIn("TRUNCATE runs, instructions, sessions, participant_questions, participant_response_votes, participant_responses, presentation_artifacts", main_source)
 
     def test_presentation_definitions_include_passive_and_interactive_slices(self):
@@ -58,6 +59,9 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn("captured_requirements", source)
         self.assertIn("submitResponse", source)
         self.assertIn("voteResponse", source)
+        self.assertIn("activeSlide", source)
+        self.assertIn("activeSlideBanner", source)
+        self.assertIn("active-slide-banner", source)
 
     def test_podium_app_renders_presentation_controls_and_artifacts(self):
         source = (ROOT / "static" / "podium.js").read_text()
@@ -86,6 +90,8 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn("createBlankSlide", source)
         self.assertIn("saveSlideOrder", source)
         self.assertIn("slide-list-panel", source)
+        self.assertIn("quick-nav-arrow", source)
+        self.assertIn("live-slide-pill", source)
 
     def test_podium_join_box_uses_app_generated_qr_code(self):
         main_source = (ROOT / "app" / "main.py").read_text()
