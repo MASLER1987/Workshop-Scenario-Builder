@@ -33,7 +33,7 @@ function saveDraft() {
 
 function render() {
   if (!state.sid) {
-    app.innerHTML = `<section class="profile-intro"><p class="eyebrow">Legal technology workshop</p><h1>Welcome</h1><p class="muted">Create your profile, then keep this page open during the presentation.</p><ol class="outcomes"><li><strong>Learn about legal technology careers</strong></li><li><strong>Learn how we build</strong></li><li><strong>Get hands on with AI</strong></li></ol><label for="name">Your name</label><input id="name" maxlength="40" placeholder="Your name"><p><button class="btn primary" id="start">Start</button></p></section>`;
+    app.innerHTML = `<section class="profile-intro">${brandMark()}<p class="eyebrow">Legal technology workshop</p><h1>Welcome</h1><p class="muted">Create your profile, then keep this page open during the presentation.</p><ol class="outcomes"><li><strong>Learn about legal technology careers</strong></li><li><strong>Learn how we build</strong></li><li><strong>Get hands on with AI</strong></li></ol><label for="name">Your name</label><input id="name" maxlength="40" placeholder="Your name"><p><button class="btn primary" id="start">Start</button></p></section>`;
     $("#start").onclick = start;
     return;
   }
@@ -203,6 +203,10 @@ function renderTranscript() {
   $("#again").onclick = () => {
     if (!state.streaming) rerun();
   };
+}
+
+function brandMark() {
+  return '<div class="brand-mark" aria-label="VWV"><strong>vwv</strong><span></span><span></span><span></span></div>';
 }
 
 function renderCompanion(mode) {

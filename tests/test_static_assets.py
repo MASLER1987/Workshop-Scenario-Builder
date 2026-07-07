@@ -9,16 +9,16 @@ class StaticAssetTests(unittest.TestCase):
     def test_index_cache_busts_participant_assets(self):
         html = (ROOT / "static" / "index.html").read_text()
 
-        self.assertIn('/static/style.css?v=presentation-09', html)
-        self.assertIn('/static/presentation.js?v=presentation-09', html)
-        self.assertIn('/static/app.js?v=presentation-09', html)
+        self.assertIn('/static/style.css?v=presentation-10', html)
+        self.assertIn('/static/presentation.js?v=presentation-10', html)
+        self.assertIn('/static/app.js?v=presentation-10', html)
 
     def test_podium_cache_busts_assets(self):
         html = (ROOT / "static" / "podium.html").read_text()
 
-        self.assertIn('/static/style.css?v=presentation-09', html)
-        self.assertIn('/static/presentation.js?v=presentation-09', html)
-        self.assertIn('/static/podium.js?v=presentation-09', html)
+        self.assertIn('/static/style.css?v=presentation-10', html)
+        self.assertIn('/static/presentation.js?v=presentation-10', html)
+        self.assertIn('/static/podium.js?v=presentation-10', html)
 
     def test_participant_stream_loop_yields_to_browser_paint(self):
         script = (ROOT / "static" / "app.js").read_text()
@@ -47,6 +47,7 @@ class StaticAssetTests(unittest.TestCase):
         self.assertIn("Learn about legal technology careers", script)
         self.assertIn("Learn how we build", script)
         self.assertIn("Get hands on with AI", script)
+        self.assertIn("brand-mark", script)
 
     def test_podium_renders_score_panel_and_best_scores(self):
         script = (ROOT / "static" / "podium.js").read_text()
@@ -54,6 +55,15 @@ class StaticAssetTests(unittest.TestCase):
         self.assertIn("best_captured", script)
         self.assertIn("best_rubric", script)
         self.assertIn("scorePanel(run?.score)", script)
+        self.assertIn("brand-mark", script)
+
+    def test_static_styles_use_vwv_brand_palette(self):
+        style = (ROOT / "static" / "style.css").read_text()
+
+        self.assertIn("--brand-navy:#192543", style)
+        self.assertIn("--brand-teal:#00a6c5", style)
+        self.assertIn("--brand-mint:#89c8a2", style)
+        self.assertIn(".brand-mark", style)
 
 
 if __name__ == "__main__":

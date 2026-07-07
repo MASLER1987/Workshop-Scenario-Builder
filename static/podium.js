@@ -115,6 +115,10 @@ function qrImageUrl() {
   return `/api/qr?text=${encodeURIComponent(qrUrl())}`;
 }
 
+function brandMark() {
+  return '<div class="brand-mark" aria-label="VWV"><strong>vwv</strong><span></span><span></span><span></span></div>';
+}
+
 async function renderPresentation() {
   const slide = currentSlide();
   if (slide.template === "requirements-capture" || slide.template === "workflow-capture") {
@@ -140,7 +144,7 @@ function renderByTemplate(slide) {
 
 function slideShell(slide, body) {
   const edited = slideOverrides[slide.id] ? '<span class="badge edited-badge">Edited</span>' : "";
-  app.innerHTML = `<div class="podium-shell presentation-shell template-${esc(slide.template || "standard")}"><header class="presentation-top"><div><p class="eyebrow">${esc(slide.section)}</p><h1>${esc(slide.title)}</h1>${edited}</div><div class="join-box"><img class="qr-code" src="${esc(qrImageUrl())}" alt="QR code for participant app"><div><span>Join</span><strong>${esc(qrUrl())}</strong></div></div></header>${body}<footer class="presentation-controls"><button class="btn secondary" id="prev">Back</button><span>${selectedSlideIndex + 1} / ${deckSlides.length}</span><button class="btn primary" id="next">Next</button><button class="btn secondary" id="slide-list">Slide list</button><button class="btn secondary" id="edit-slide">Edit slide</button><button class="btn secondary" id="grid">Live grid</button><button class="btn secondary" id="reset">Reset</button></footer></div>`;
+  app.innerHTML = `<div class="podium-shell presentation-shell template-${esc(slide.template || "standard")}"><header class="presentation-top"><div class="slide-heading"><div class="brand-row">${brandMark()}<p class="eyebrow">${esc(slide.section)}</p></div><h1>${esc(slide.title)}</h1>${edited}</div><div class="join-box"><img class="qr-code" src="${esc(qrImageUrl())}" alt="QR code for participant app"><div><span>Join</span><strong>${esc(qrUrl())}</strong></div></div></header>${body}<footer class="presentation-controls"><button class="btn secondary" id="prev">Back</button><span>${selectedSlideIndex + 1} / ${deckSlides.length}</span><button class="btn primary" id="next">Next</button><button class="btn secondary" id="slide-list">Slide list</button><button class="btn secondary" id="edit-slide">Edit slide</button><button class="btn secondary" id="grid">Live grid</button><button class="btn secondary" id="reset">Reset</button></footer></div>`;
   document.querySelector("#prev").onclick = () => activateSlide(selectedSlideIndex - 1);
   document.querySelector("#next").onclick = () => activateSlide(selectedSlideIndex + 1);
   document.querySelector("#slide-list").onclick = renderSlideList;
@@ -427,7 +431,7 @@ function sortedSessions() {
 
 function renderGrid() {
   detail = null;
-  app.innerHTML = `<div class="podium-shell"><header class="podium-header"><div class="podium-title"><h1>Prompt Playground Podium</h1><p>${sessions.length} participants live</p></div><div class="podium-actions"><span class="badge">Scenario pool: ${scenarios.length}</span><button class="btn secondary" id="slides">Slides</button><button class="btn secondary" id="reset">Reset</button></div></header>${summaryStrip()}<div class="sortbar"><button class="btn ${sortMode === "leaderboard" ? "primary" : "secondary"}" data-sort="leaderboard">Leaderboard</button><button class="btn ${sortMode === "improved" ? "primary" : "secondary"}" data-sort="improved">Most improved</button></div><section class="grid">${sortedSessions().map(card).join("")}</section></div>`;
+  app.innerHTML = `<div class="podium-shell"><header class="podium-header"><div class="podium-title">${brandMark()}<h1>Prompt Playground Podium</h1><p>${sessions.length} participants live</p></div><div class="podium-actions"><span class="badge">Scenario pool: ${scenarios.length}</span><button class="btn secondary" id="slides">Slides</button><button class="btn secondary" id="reset">Reset</button></div></header>${summaryStrip()}<div class="sortbar"><button class="btn ${sortMode === "leaderboard" ? "primary" : "secondary"}" data-sort="leaderboard">Leaderboard</button><button class="btn ${sortMode === "improved" ? "primary" : "secondary"}" data-sort="improved">Most improved</button></div><section class="grid">${sortedSessions().map(card).join("")}</section></div>`;
   document.querySelectorAll(".card").forEach((c) => (c.onclick = () => openDetail(c.dataset.id)));
   document.querySelectorAll("[data-sort]").forEach((b) => (b.onclick = () => {
     sortMode = b.dataset.sort;
