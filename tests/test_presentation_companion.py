@@ -104,6 +104,7 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn('qrImageUrl', podium_source)
         self.assertIn('class="qr-code"', podium_source)
         self.assertIn('/api/qr?text=', podium_source)
+        self.assertNotIn('<strong>${esc(qrUrl())}</strong>', podium_source)
 
 
 if __name__ == "__main__":
