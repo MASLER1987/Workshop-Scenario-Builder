@@ -9,14 +9,16 @@ class StaticAssetTests(unittest.TestCase):
     def test_index_cache_busts_participant_assets(self):
         html = (ROOT / "static" / "index.html").read_text()
 
-        self.assertIn('/static/style.css?v=queue-05', html)
-        self.assertIn('/static/app.js?v=queue-05', html)
+        self.assertIn('/static/style.css?v=presentation-08', html)
+        self.assertIn('/static/presentation.js?v=presentation-08', html)
+        self.assertIn('/static/app.js?v=presentation-08', html)
 
     def test_podium_cache_busts_assets(self):
         html = (ROOT / "static" / "podium.html").read_text()
 
-        self.assertIn('/static/style.css?v=scenario-pool-07', html)
-        self.assertIn('/static/podium.js?v=scenario-pool-07', html)
+        self.assertIn('/static/style.css?v=presentation-08', html)
+        self.assertIn('/static/presentation.js?v=presentation-08', html)
+        self.assertIn('/static/podium.js?v=presentation-08', html)
 
     def test_participant_stream_loop_yields_to_browser_paint(self):
         script = (ROOT / "static" / "app.js").read_text()

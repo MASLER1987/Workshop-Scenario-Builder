@@ -67,8 +67,49 @@ async def init_db() -> None:
           ended_reason TEXT,
           created_at TIMESTAMPTZ DEFAULT now()
         );
+        CREATE TABLE IF NOT EXISTS presentation_state (
+          id INT PRIMARY KEY DEFAULT 1,
+          active_slide_id TEXT NOT NULL,
+          active_mode TEXT NOT NULL,
+          is_frozen BOOLEAN DEFAULT false,
+          updated_at TIMESTAMPTZ DEFAULT now()
+        );
+        CREATE TABLE IF NOT EXISTS participant_questions (
+          id UUID PRIMARY KEY,
+          session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
+          text TEXT NOT NULL,
+          is_answered BOOLEAN DEFAULT false,
+          created_at TIMESTAMPTZ DEFAULT now()
+        );
+        CREATE TABLE IF NOT EXISTS participant_responses (
+          id UUID PRIMARY KEY,
+          session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
+          slide_id TEXT NOT NULL,
+          response_type TEXT NOT NULL,
+          payload JSONB NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT now()
+        );
+        CREATE TABLE IF NOT EXISTS participant_response_votes (
+          response_id UUID REFERENCES participant_responses(id) ON DELETE CASCADE,
+          session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
+          created_at TIMESTAMPTZ DEFAULT now(),
+          PRIMARY KEY (response_id, session_id)
+        );
+        CREATE TABLE IF NOT EXISTS presentation_artifacts (
+          id UUID PRIMARY KEY,
+          slide_id TEXT NOT NULL,
+          artifact_type TEXT NOT NULL,
+          payload JSONB NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT now(),
+          UNIQUE (slide_id, artifact_type)
+        );
         CREATE UNIQUE INDEX IF NOT EXISTS one_active_scenario ON scenarios ((is_active)) WHERE is_active;
         """)
+        await con.execute(
+            """INSERT INTO presentation_state (id, active_slide_id, active_mode)
+               VALUES (1, 'welcome', 'passive')
+               ON CONFLICT (id) DO NOTHING"""
+        )
         await con.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS score JSONB")
         await con.execute("ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS objectives JSONB")
         await con.execute("ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS scorecard JSONB")

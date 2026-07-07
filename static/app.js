@@ -8,6 +8,9 @@ let state = {
   version: 0,
   run: null,
   scenario: null,
+  presentation: null,
+  captured_requirements: null,
+  responses: [],
   mode: "init",
   streaming: false,
   notice: "",
@@ -34,11 +37,16 @@ function render() {
     $("#start").onclick = start;
     return;
   }
-  if (state.mode === "transcript" && state.run) {
+  const participantMode = state.presentation?.participant_mode || "qna";
+  if ((participantMode === "results" || state.mode === "transcript") && state.run) {
     renderTranscript();
     return;
   }
-  app.innerHTML = `<div class="top"><strong>${esc(state.name)}</strong><span class="badge">v${state.version || "new"}</span></div><h2>Write your chatbot instruction</h2><textarea id="instruction" maxlength="4000" placeholder="Write the instructions for your intake chatbot...">${esc(state.instruction)}</textarea><div class="bar"><button class="btn secondary" id="brief">Client brief</button><button class="btn primary" id="run">Run test</button></div>`;
+  if (participantMode !== "bot") {
+    renderCompanion(participantMode);
+    return;
+  }
+  app.innerHTML = `<div class="top"><strong>${esc(state.name)}</strong><span class="badge">v${state.version || "new"}</span></div><h2>Write your chatbot instruction</h2>${capturedRequirementsHtml()}<textarea id="instruction" maxlength="4000" placeholder="Write the instructions for your intake chatbot...">${esc(state.instruction)}</textarea><div class="bar"><button class="btn secondary" id="brief">Client brief</button><button class="btn primary" id="run">Run test</button></div>`;
   $("#instruction").oninput = (e) => {
     state.instruction = e.target.value;
     saveDraft();
@@ -62,10 +70,12 @@ async function load() {
     const r = await api(`/api/sessions/${state.sid}/state`);
     state.name = r.display_name;
     state.scenario = r.active_scenario;
+    state.captured_requirements = r.captured_requirements;
     state.instruction = localStorage["draft:" + state.sid] || r.latest_instruction?.text || "";
     state.version = r.latest_instruction?.version_number || 0;
     state.run = r.latest_run;
-    state.mode = state.run ? "transcript" : "editor";
+    await loadPresentationState();
+    state.mode = state.presentation?.participant_mode === "results" && state.run ? "transcript" : "editor";
     state.streaming = false;
     state.notice = "";
     render();
@@ -74,6 +84,23 @@ async function load() {
     state.sid = null;
     render();
   }
+}
+
+async function loadPresentationState() {
+  state.presentation = await api("/api/presentation/state");
+  state.captured_requirements = state.presentation.captured_requirements || state.captured_requirements;
+  if (state.presentation.participant_mode === "process") {
+    state.responses = await api(`/api/presentation/responses?slide_id=${encodeURIComponent(state.presentation.active_slide_id)}`);
+  }
+}
+
+async function refreshPresentation() {
+  if (!state.sid || state.streaming) return;
+  try {
+    const before = state.presentation?.active_slide_id;
+    await loadPresentationState();
+    if (state.presentation?.active_slide_id !== before || state.presentation?.participant_mode === "process") render();
+  } catch (e) {}
 }
 
 async function run() {
@@ -178,12 +205,83 @@ function renderTranscript() {
   };
 }
 
+function renderCompanion(mode) {
+  const slide = typeof presentationSlide === "function" ? presentationSlide(state.presentation?.active_slide_id) : null;
+  if (mode === "requirements") {
+    renderRequirements(slide);
+  } else if (mode === "process") {
+    renderProcess(slide);
+  } else if (mode === "qna") {
+    renderQna(slide);
+  } else {
+    renderPassive(slide);
+  }
+}
+
+function renderPassive(slide) {
+  app.innerHTML = `<div class="top"><strong>${esc(state.name)}</strong><span class="badge">Connected</span></div><section class="companion"><p class="eyebrow">On screen</p><h1>${esc(slide?.title || "Workshop")}</h1><p>${esc(slide?.body || "Watch the screen. You can ask a question at any time.")}</p><button class="btn secondary" id="qna">Ask a question</button></section>`;
+  $("#qna").onclick = () => renderQna(slide);
+}
+
+function renderQna(slide) {
+  app.innerHTML = `<div class="top"><strong>${esc(state.name)}</strong><span class="badge">Q&A</span></div><section class="companion"><p class="eyebrow">On screen</p><h1>${esc(slide?.title || "Questions")}</h1><p class="muted">Ask a question for the presenters.</p><textarea id="question" maxlength="500" class="short" placeholder="Type your question..."></textarea><p><button class="btn primary" id="send-question">Send question</button></p>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</section>`;
+  $("#send-question").onclick = submitQuestion;
+}
+
+async function submitQuestion() {
+  const text = $("#question").value.trim();
+  if (!text) return;
+  await api(`/api/sessions/${state.sid}/questions`, { method: "POST", body: JSON.stringify({ text }) });
+  state.notice = "Question sent.";
+  renderQna(typeof presentationSlide === "function" ? presentationSlide(state.presentation?.active_slide_id) : null);
+}
+
+function renderRequirements(slide) {
+  app.innerHTML = `<div class="top"><strong>${esc(state.name)}</strong><span class="badge">Requirements</span></div><section class="companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "What matters for intake?")}</h1><p>Suggest something the bot should collect, avoid, or explain.</p><textarea id="response" maxlength="160" class="short" placeholder="${esc(state.presentation?.interaction?.placeholder || "Your idea...")}"></textarea><p><button class="btn primary" id="send-response">Send idea</button></p>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</section>`;
+  $("#send-response").onclick = () => submitResponse("requirements");
+}
+
+function renderProcess(slide) {
+  const suggestions = (state.responses || []).map((item) => `<li><button class="vote" data-vote="${item.id}">+${item.votes || 0}</button><span>${esc(item.payload?.text || "")}</span></li>`).join("");
+  app.innerHTML = `<div class="top"><strong>${esc(state.name)}</strong><span class="badge">Process map</span></div><section class="companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "Matter intake stages")}</h1><p>Suggest a stage, or upvote one that looks useful.</p><textarea id="response" maxlength="100" class="short" placeholder="${esc(state.presentation?.interaction?.placeholder || "Suggest a stage...")}"></textarea><p><button class="btn primary" id="send-response">Send stage</button></p><ul class="phone-list">${suggestions}</ul>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</section>`;
+  $("#send-response").onclick = () => submitResponse("process");
+  document.querySelectorAll("[data-vote]").forEach((button) => (button.onclick = () => voteResponse(button.dataset.vote)));
+}
+
+async function submitResponse(type) {
+  const text = $("#response").value.trim();
+  if (!text) return;
+  await api(`/api/sessions/${state.sid}/responses`, {
+    method: "POST",
+    body: JSON.stringify({
+      slide_id: state.presentation.active_slide_id,
+      response_type: type,
+      payload: { text },
+    }),
+  });
+  state.notice = "Sent.";
+  await loadPresentationState();
+  render();
+}
+
+async function voteResponse(responseId) {
+  await api(`/api/sessions/${state.sid}/responses/${responseId}/vote`, { method: "POST" });
+  await loadPresentationState();
+  render();
+}
+
 function drawer() {
   const d = document.createElement("div");
   d.className = "drawer";
-  d.innerHTML = `<button class="btn secondary close">x</button><h2>${esc(state.scenario?.title || "Client brief")}</h2><p>${esc(state.scenario?.public_brief || "")}</p>`;
+  d.innerHTML = `<button class="btn secondary close">x</button><h2>${esc(state.scenario?.title || "Client brief")}</h2><p>${esc(state.scenario?.public_brief || "")}</p>${capturedRequirementsHtml()}`;
   document.body.append(d);
   d.querySelector("button").onclick = () => d.remove();
+}
+
+function capturedRequirementsHtml() {
+  const items = state.captured_requirements?.items || [];
+  if (!items.length) return "";
+  return `<h3>Class requirements</h3><ul>${items.map((item) => `<li>${esc(item.text || item)}</li>`).join("")}</ul>`;
 }
 
 function chat(t) {
@@ -216,4 +314,5 @@ function esc(s = "") {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+setInterval(refreshPresentation, 5000);
 state.sid ? load() : render();

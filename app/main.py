@@ -32,6 +32,26 @@ class SessionIn(BaseModel):
 class RunIn(BaseModel):
     instruction_text: str = Field(max_length=4000)
 
+class QuestionIn(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
+
+class ResponseIn(BaseModel):
+    slide_id: str = Field(min_length=1, max_length=80)
+    response_type: str = Field(min_length=1, max_length=40)
+    payload: dict = Field(default_factory=dict)
+
+class PresentationActivateIn(BaseModel):
+    slide_id: str = Field(min_length=1, max_length=80)
+    mode: str = Field(min_length=1, max_length=40)
+
+class PresentationFreezeIn(BaseModel):
+    is_frozen: bool
+
+class ArtifactIn(BaseModel):
+    slide_id: str = Field(min_length=1, max_length=80)
+    artifact_type: str = Field(min_length=1, max_length=60)
+    payload: dict = Field(default_factory=dict)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.connect(); await db.init_db()
@@ -47,6 +67,42 @@ def rowdict(r):
 
 def participant_scenario_payload() -> dict[str, str]:
     return {"title": "Family team enquiry", "public_brief": GENERIC_PARTICIPANT_BRIEF}
+
+SLIDE_MODES = {
+    "welcome": "passive",
+    "legal-tech": "passive",
+    "legal-engineering": "passive",
+    "skills-careers": "passive",
+    "careers-map": "passive",
+    "challenge-bridge": "passive",
+    "baseline-build": "bot",
+    "baseline-results": "results",
+    "requirements-gathering": "requirements",
+    "requirements-build": "bot",
+    "process-map": "process",
+    "process-inspection": "passive",
+    "debrief": "passive",
+    "careers-wrap": "qna",
+}
+
+def slide_interaction_config(slide_id: str) -> dict:
+    if slide_id == "requirements-gathering":
+        return {"maxLength": 160, "placeholder": "What should the intake bot collect, avoid, or explain?"}
+    if slide_id == "process-map":
+        return {"maxLength": 100, "placeholder": "Suggest a stage in matter intake."}
+    return {}
+
+async def captured_requirements() -> dict | None:
+    row = await db.fetchrow(
+        "SELECT payload FROM presentation_artifacts WHERE slide_id='requirements-gathering' AND artifact_type='captured_requirements'"
+    )
+    return row["payload"] if row else None
+
+async def require_session(sid: uuid.UUID):
+    s = await db.fetchrow("SELECT * FROM sessions WHERE id=$1", sid)
+    if not s:
+        raise HTTPException(404, "Session not found")
+    return s
 
 
 def select_run_scenario_sql() -> str:
@@ -88,6 +144,37 @@ async def podium(key: str | None = None):
 @app.get("/health")
 async def health(): return {"ok": True}
 
+@app.get("/api/presentation/state")
+async def presentation_state():
+    row = await db.fetchrow("SELECT * FROM presentation_state WHERE id=1")
+    if not row:
+        await db.execute("INSERT INTO presentation_state (id, active_slide_id, active_mode) VALUES (1,'welcome','passive')")
+        row = await db.fetchrow("SELECT * FROM presentation_state WHERE id=1")
+    slide_id = row["active_slide_id"]
+    mode = row["active_mode"] or SLIDE_MODES.get(slide_id, "passive")
+    requirements = await captured_requirements()
+    return {
+        "active_slide_id": slide_id,
+        "participant_mode": mode,
+        "is_frozen": row["is_frozen"],
+        "interaction": slide_interaction_config(slide_id),
+        "captured_requirements": requirements,
+        "updated_at": row["updated_at"],
+    }
+
+@app.get("/api/presentation/responses")
+async def presentation_responses(slide_id: str):
+    rows = await db.fetch(
+        """SELECT r.id, r.slide_id, r.response_type, r.payload, r.created_at,
+                  coalesce((SELECT count(*) FROM participant_response_votes v WHERE v.response_id=r.id),0) votes
+           FROM participant_responses r
+           WHERE r.slide_id=$1
+           ORDER BY votes DESC, r.created_at DESC
+           LIMIT 80""",
+        slide_id,
+    )
+    return [dict(r) for r in rows]
+
 @app.post("/api/sessions")
 async def create_session(body: SessionIn):
     sid = uuid.uuid4()
@@ -100,7 +187,44 @@ async def session_state(sid: uuid.UUID):
     if not s: raise HTTPException(404, "Session not found")
     inst = await db.fetchrow("SELECT * FROM instructions WHERE session_id=$1 ORDER BY version_number DESC LIMIT 1", sid)
     run = await db.fetchrow("SELECT * FROM runs WHERE session_id=$1 ORDER BY created_at DESC LIMIT 1", sid)
-    return {"display_name": s["display_name"], "latest_instruction": rowdict(inst), "latest_run": rowdict(run), "active_scenario": participant_scenario_payload()}
+    return {"display_name": s["display_name"], "latest_instruction": rowdict(inst), "latest_run": rowdict(run), "active_scenario": participant_scenario_payload(), "captured_requirements": await captured_requirements()}
+
+@app.post("/api/sessions/{sid}/questions")
+async def submit_question(sid: uuid.UUID, body: QuestionIn):
+    await require_session(sid)
+    row = await db.fetchrow(
+        "INSERT INTO participant_questions (id, session_id, text) VALUES ($1,$2,$3) RETURNING *",
+        uuid.uuid4(),
+        sid,
+        body.text.strip(),
+    )
+    return {"question": rowdict(row)}
+
+@app.post("/api/sessions/{sid}/responses")
+async def submit_response(sid: uuid.UUID, body: ResponseIn):
+    await require_session(sid)
+    row = await db.fetchrow(
+        "INSERT INTO participant_responses (id, session_id, slide_id, response_type, payload) VALUES ($1,$2,$3,$4,$5::jsonb) RETURNING *",
+        uuid.uuid4(),
+        sid,
+        body.slide_id,
+        body.response_type,
+        body.payload,
+    )
+    return {"response": rowdict(row)}
+
+@app.post("/api/sessions/{sid}/responses/{response_id}/vote")
+async def vote_response(sid: uuid.UUID, response_id: uuid.UUID):
+    await require_session(sid)
+    exists = await db.fetchrow("SELECT id FROM participant_responses WHERE id=$1", response_id)
+    if not exists:
+        raise HTTPException(404, "Response not found")
+    await db.execute(
+        "INSERT INTO participant_response_votes (response_id, session_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+        response_id,
+        sid,
+    )
+    return {"ok": True}
 
 async def _prepare_run(sid: uuid.UUID, instruction_text: str | None):
     key = str(sid)
@@ -265,6 +389,83 @@ async def podium_session(sid: uuid.UUID, key: str = Query(...)):
         history.append(item)
     return {"latest_instruction": rowdict(latest), "latest_run": rowdict(run), "run_history": history}
 
+@app.get("/api/podium/presentation")
+async def podium_presentation(key: str = Query(...)):
+    podium_auth(key)
+    state = await presentation_state()
+    return state
+
+@app.post("/api/podium/presentation/activate")
+async def podium_activate_presentation(body: PresentationActivateIn, key: str = Query(...)):
+    podium_auth(key)
+    await db.execute(
+        """UPDATE presentation_state
+           SET active_slide_id=$1, active_mode=$2, updated_at=now()
+           WHERE id=1""",
+        body.slide_id,
+        body.mode,
+    )
+    return {"ok": True}
+
+@app.post("/api/podium/presentation/freeze")
+async def podium_freeze_presentation(body: PresentationFreezeIn, key: str = Query(...)):
+    podium_auth(key)
+    await db.execute("UPDATE presentation_state SET is_frozen=$1, updated_at=now() WHERE id=1", body.is_frozen)
+    return {"ok": True}
+
+@app.get("/api/podium/questions")
+async def podium_questions(key: str = Query(...)):
+    podium_auth(key)
+    rows = await db.fetch(
+        """SELECT q.*, s.display_name
+           FROM participant_questions q
+           JOIN sessions s ON s.id=q.session_id
+           ORDER BY q.created_at DESC"""
+    )
+    return [dict(r) for r in rows]
+
+@app.post("/api/podium/questions/{question_id}/answered")
+async def podium_mark_question_answered(question_id: uuid.UUID, key: str = Query(...)):
+    podium_auth(key)
+    await db.execute("UPDATE participant_questions SET is_answered=true WHERE id=$1", question_id)
+    return {"ok": True}
+
+@app.get("/api/podium/responses")
+async def podium_responses(slide_id: str, key: str = Query(...)):
+    podium_auth(key)
+    rows = await db.fetch(
+        """SELECT r.*, s.display_name,
+                  coalesce((SELECT count(*) FROM participant_response_votes v WHERE v.response_id=r.id),0) votes
+           FROM participant_responses r
+           JOIN sessions s ON s.id=r.session_id
+           WHERE r.slide_id=$1
+           ORDER BY votes DESC, r.created_at DESC""",
+        slide_id,
+    )
+    return [dict(r) for r in rows]
+
+@app.get("/api/podium/artifacts")
+async def podium_get_artifacts(slide_id: str, key: str = Query(...)):
+    podium_auth(key)
+    rows = await db.fetch("SELECT * FROM presentation_artifacts WHERE slide_id=$1 ORDER BY updated_at DESC", slide_id)
+    return [dict(r) for r in rows]
+
+@app.post("/api/podium/artifacts")
+async def podium_save_artifact(body: ArtifactIn, key: str = Query(...)):
+    podium_auth(key)
+    row = await db.fetchrow(
+        """INSERT INTO presentation_artifacts (id, slide_id, artifact_type, payload)
+           VALUES ($1,$2,$3,$4::jsonb)
+           ON CONFLICT (slide_id, artifact_type)
+           DO UPDATE SET payload=excluded.payload, updated_at=now()
+           RETURNING *""",
+        uuid.uuid4(),
+        body.slide_id,
+        body.artifact_type,
+        body.payload,
+    )
+    return {"artifact": rowdict(row)}
+
 @app.get("/api/podium/scenarios")
 async def scenarios(key: str = Query(...)):
     podium_auth(key); return [dict(r) for r in await db.fetch("SELECT id,title,public_brief,is_active FROM scenarios ORDER BY title")]
@@ -282,4 +483,7 @@ async def activate(sid: uuid.UUID, key: str = Query(...)):
 
 @app.post("/api/podium/reset")
 async def reset(key: str = Query(...)):
-    podium_auth(key); await db.execute("TRUNCATE runs, instructions, sessions CASCADE"); return {"ok": True}
+    podium_auth(key)
+    await db.execute("TRUNCATE runs, instructions, sessions, participant_questions, participant_response_votes, participant_responses, presentation_artifacts CASCADE")
+    await db.execute("UPDATE presentation_state SET active_slide_id='welcome', active_mode='passive', is_frozen=false, updated_at=now() WHERE id=1")
+    return {"ok": True}

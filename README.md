@@ -13,7 +13,7 @@ A single FastAPI service for live workshops where participants write generic fam
 
 | Var | Purpose |
 | --- | --- |
-| `DATABASE_URL` | Postgres connection string |
+| `DATABASE_URL` | Railway Postgres connection string, injected by the Railway Postgres service |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
 | `PODIUM_KEY` | Shared secret for `/podium?key=...` and podium API routes |
 | `ACTIVE_SCENARIO_ID` | Optional scenario override; otherwise each run selects randomly from the family scenario pool |
@@ -35,6 +35,16 @@ Participant app: <http://localhost:8000/>
 
 Presenter app: <http://localhost:8000/podium?key=dev-secret>
 
+## Synced presentation mode
+
+The podium controls the live workshop flow. Each podium slide shows the participant URL so students can join once, create a profile, and keep their phone open as a companion view.
+
+- Most slides keep phones in Q&A/passive mode.
+- Baseline and improvement rounds switch phones to the bot builder.
+- The requirements slide lets students submit ideas while the podium curates a captured requirements list.
+- The second bot round shows that captured requirements list above the participant editor.
+- The process map slide lets students submit/upvote stage ideas while the podium arranges them into a stage board.
+
 ## Railway
 
 Set the Railway start command to:
@@ -43,4 +53,12 @@ Set the Railway start command to:
 uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
-Attach Railway Postgres, then set `ANTHROPIC_API_KEY` and `PODIUM_KEY` in service variables.
+Attach Railway Postgres to the app service. Railway should inject `DATABASE_URL`; do not hardcode a database URL in the repo.
+
+On startup, the FastAPI service uses `DATABASE_URL` and creates/updates the required schema in Railway Postgres, including sessions, runs, scenarios, presentation state, Q&A, responses, votes, and curated presentation artifacts.
+
+Set these service variables manually:
+
+- `ANTHROPIC_API_KEY`
+- `PODIUM_KEY`
+- `MAX_ACTIVE_RUNS` optional, defaults to `10`
