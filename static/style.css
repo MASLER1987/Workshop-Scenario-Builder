@@ -131,13 +131,13 @@ textarea.short{min-height:130px}
 .podium .skill{grid-template-columns:130px 1fr 60px;font-size:20px}
 .podium .dots i{width:28px;height:14px}
 
-.presentation-shell{min-height:calc(100vh - clamp(48px,6vw,112px));display:flex;flex-direction:column}
-.presentation-top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:30px;align-items:start;margin-bottom:clamp(28px,4vw,58px)}
+.presentation-shell{position:relative;min-height:calc(100vh - clamp(48px,6vw,112px));display:flex;flex-direction:column}
+.presentation-top{display:block;padding-right:clamp(116px,12vw,156px);margin-bottom:clamp(28px,4vw,58px)}
 .brand-row{display:flex;align-items:center;gap:28px;margin-bottom:22px}
 .brand-row .brand-mark strong{font-size:44px}
 .slide-heading{max-width:1180px}
 .presentation-top h1{font-size:clamp(54px,5.6vw,104px);line-height:.98;margin:0;color:var(--brand-navy);letter-spacing:-.035em}
-.join-box{background:white;color:var(--brand-navy);border:1px solid var(--line);border-radius:8px;padding:8px;display:grid;place-items:center;justify-self:end}
+.join-box{position:absolute;top:0;right:0;background:white;color:var(--brand-navy);border:1px solid var(--line);border-radius:8px;padding:8px;display:grid;place-items:center}
 .qr-code{width:112px;height:112px;background:white;border:0;border-radius:6px;padding:4px}
 .presentation-card{background:transparent;border:0;border-radius:0;padding:clamp(18px,2vw,34px) 0;box-shadow:none;flex:1}
 .presentation-card p{font-size:clamp(28px,2.8vw,52px);line-height:1.15;margin:0 0 28px;max-width:1200px}
@@ -226,10 +226,9 @@ textarea.short{min-height:130px}
   .detail-shell{height:auto}
   .detail{grid-template-columns:1fr;height:auto}
   .pane{max-height:none}
-  .presentation-top,.curation-layout,.interaction-slide,.qna-review{grid-template-columns:1fr}
+  .curation-layout,.interaction-slide,.qna-review{grid-template-columns:1fr}
   .activity-metrics{grid-template-columns:1fr 1fr 1fr}
   .brand-row{gap:16px;flex-wrap:wrap}
-  .join-box{justify-self:start}
 }
 
 @media(max-width:700px){
@@ -238,6 +237,7 @@ textarea.short{min-height:130px}
   .sortbar,.podium-actions{flex-direction:column;align-items:stretch}
   .podium-actions select{min-width:0}
   .card-score strong{font-size:38px}
+  .presentation-top{padding-right:100px}
   .presentation-top h1{font-size:44px}
   .presentation-controls{flex-wrap:wrap}
   .qr-code{width:84px;height:84px}

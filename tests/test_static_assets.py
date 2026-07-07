@@ -16,9 +16,9 @@ class StaticAssetTests(unittest.TestCase):
     def test_podium_cache_busts_assets(self):
         html = (ROOT / "static" / "podium.html").read_text()
 
-        self.assertIn('/static/style.css?v=presentation-11', html)
-        self.assertIn('/static/presentation.js?v=presentation-11', html)
-        self.assertIn('/static/podium.js?v=presentation-11', html)
+        self.assertIn('/static/style.css?v=presentation-12', html)
+        self.assertIn('/static/presentation.js?v=presentation-12', html)
+        self.assertIn('/static/podium.js?v=presentation-12', html)
 
     def test_participant_stream_loop_yields_to_browser_paint(self):
         script = (ROOT / "static" / "app.js").read_text()
@@ -64,6 +64,7 @@ class StaticAssetTests(unittest.TestCase):
         self.assertIn("--brand-teal:#00a6c5", style)
         self.assertIn("--brand-mint:#89c8a2", style)
         self.assertIn(".brand-mark", style)
+        self.assertIn(".join-box{position:absolute;top:0;right:0", style)
 
 
 if __name__ == "__main__":
