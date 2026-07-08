@@ -162,7 +162,7 @@ function renderSlideList() {
   document.querySelector(".slide-list-panel")?.remove();
   const rows = deckSlides.map((slide, index) => {
     const isLive = index === selectedSlideIndex;
-    return `<article class="slide-row ${isLive ? "selected" : ""}" data-slide-id="${esc(slide.id)}"><span class="drag-handle" draggable="true" data-drag-slide="${esc(slide.id)}" role="button" tabindex="0" aria-label="Drag slide ${index + 1}">::</span><button class="quick-nav-arrow" data-go-slide="${index}" aria-label="Go to slide ${index + 1}">-></button><button class="slide-row-main" data-go-slide="${index}"><strong>${index + 1}. ${esc(slide.title || "Untitled slide")}${isLive ? '<span class="live-slide-pill">Live</span>' : ""}</strong><small>${esc(slide.section || "slide")} · ${esc(slide.template || "standard")} · phone: ${esc(slide.participantMode || "passive")}</small></button><button class="btn secondary" data-edit-row="${index}">Edit</button></article>`;
+    return `<article class="slide-row ${isLive ? "selected" : ""}" draggable="true" data-slide-id="${esc(slide.id)}"><span class="drag-handle" role="presentation">::</span><button class="quick-nav-arrow" draggable="false" data-go-slide="${index}" aria-label="Go to slide ${index + 1}">-></button><button class="slide-row-main" draggable="false" data-go-slide="${index}"><strong>${index + 1}. ${esc(slide.title || "Untitled slide")}${isLive ? '<span class="live-slide-pill">Live</span>' : ""}</strong><small>${esc(slide.section || "slide")} · ${esc(slide.template || "standard")} · phone: ${esc(slide.participantMode || "passive")}</small></button><button class="btn secondary" draggable="false" data-edit-row="${index}">Edit</button></article>`;
   }).join("");
   document.body.insertAdjacentHTML("beforeend", `<aside class="slide-list-panel"><header><div><span class="eyebrow">Deck</span><h2>Slide list</h2></div><button type="button" class="icon-close" id="close-slide-list" aria-label="Close">x</button></header><div class="slide-list-actions"><button class="btn primary" id="new-slide">New slide</button><span>${deckPersisted ? "Saved in Railway" : "Using bundled deck"}</span></div><div class="slide-rows">${rows}</div></aside>`);
   document.querySelector("#close-slide-list").onclick = closeSlideList;
@@ -180,16 +180,14 @@ function closeSlideList() {
 }
 
 function bindSlideRows() {
-  document.querySelectorAll(".drag-handle[draggable]").forEach((handle) => {
-    handle.ondragstart = (event) => {
-      draggingSlideId = handle.dataset.dragSlide;
+  document.querySelectorAll(".slide-row[draggable]").forEach((row) => {
+    row.ondragstart = (event) => {
+      draggingSlideId = row.dataset.slideId;
       event.dataTransfer.effectAllowed = "move";
       event.dataTransfer.setData("text/plain", draggingSlideId);
-      handle.closest(".slide-row")?.classList.add("dragging");
+      row.classList.add("dragging");
     };
-    handle.ondragend = clearSlideDragState;
-  });
-  document.querySelectorAll(".slide-row[data-slide-id]").forEach((row) => {
+    row.ondragend = clearSlideDragState;
     row.ondragenter = (event) => {
       if (!draggingSlideId || row.dataset.slideId === draggingSlideId) return;
       event.preventDefault();
@@ -219,6 +217,29 @@ function clearSlideDragState() {
   });
 }
 
+function slideRowPositions() {
+  return new Map(
+    [...document.querySelectorAll(".slide-row[data-slide-id]")].map((row) => [
+      row.dataset.slideId,
+      row.getBoundingClientRect(),
+    ])
+  );
+}
+
+function animateSlideListFrom(previousPositions) {
+  document.querySelectorAll(".slide-row[data-slide-id]").forEach((row) => {
+    const previous = previousPositions.get(row.dataset.slideId);
+    if (!previous) return;
+    const current = row.getBoundingClientRect();
+    const deltaY = previous.top - current.top;
+    if (!deltaY) return;
+    row.animate(
+      [{ transform: `translateY(${deltaY}px)` }, { transform: "translateY(0)" }],
+      { duration: 190, easing: "cubic-bezier(.2,.8,.2,1)" }
+    );
+  });
+}
+
 async function persistCurrentDeck() {
   const slides = deckSlides.map((slide) => effectiveSlide(slide));
   await api("/api/podium/slides", {
@@ -238,6 +259,7 @@ async function saveSlideOrder() {
 
 async function reorderSlide(sourceId, targetId) {
   if (!sourceId || !targetId || sourceId === targetId) return;
+  const previousPositions = slideRowPositions();
   const activeId = currentSlide().id;
   const sourceIndex = deckSlides.findIndex((slide) => slide.id === sourceId);
   const targetIndex = deckSlides.findIndex((slide) => slide.id === targetId);
@@ -249,6 +271,7 @@ async function reorderSlide(sourceId, targetId) {
   selectedSlideIndex = Math.max(0, deckSlides.findIndex((slide) => slide.id === activeId));
   await saveSlideOrder();
   renderSlideList();
+  animateSlideListFrom(previousPositions);
   renderPresentation();
 }
 
