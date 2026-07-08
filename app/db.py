@@ -46,6 +46,20 @@ def describe_database_url(url: str) -> str:
     database = parsed.path or ""
     return f"{parsed.scheme}://{host}:{port}{database}"
 
+
+def connection_variants(url: str) -> list[tuple[str, dict[str, Any]]]:
+    parsed = urlparse(url)
+    variants: list[tuple[str, dict[str, Any]]] = [("default SSL negotiation", {})]
+    if (parsed.hostname or "").endswith(".railway.internal"):
+        return variants
+    variants.extend(
+        [
+            ("SSL disabled", {"ssl": False}),
+            ("SSL required", {"ssl": True}),
+        ]
+    )
+    return variants
+
 async def connect() -> None:
     global _pool
     if _pool is not None:
@@ -64,24 +78,33 @@ async def connect() -> None:
     for attempt in range(1, attempts + 1):
         for url in urls:
             target = describe_database_url(url)
-            try:
-                logger.info("Connecting to Postgres at %s (attempt %s/%s)", target, attempt, attempts)
-                _pool = await asyncpg.create_pool(
-                    url,
-                    min_size=min_size,
-                    max_size=max_size,
-                    init=init,
-                    timeout=timeout,
-                    command_timeout=30,
-                )
-                return
-            except (TimeoutError, OSError, asyncpg.PostgresError):
-                logger.exception(
-                    "Could not connect to Postgres at %s within %.1fs. "
-                    "Check Railway DATABASE_URL, the attached Postgres service, and environment.",
-                    target,
-                    timeout,
-                )
+            for label, options in connection_variants(url):
+                try:
+                    logger.info(
+                        "Connecting to Postgres at %s using %s (attempt %s/%s)",
+                        target,
+                        label,
+                        attempt,
+                        attempts,
+                    )
+                    _pool = await asyncpg.create_pool(
+                        url,
+                        min_size=min_size,
+                        max_size=max_size,
+                        init=init,
+                        timeout=timeout,
+                        command_timeout=30,
+                        **options,
+                    )
+                    return
+                except (TimeoutError, OSError, asyncpg.PostgresError):
+                    logger.exception(
+                        "Could not connect to Postgres at %s using %s within %.1fs. "
+                        "Check Railway DATABASE_URL, DATABASE_PUBLIC_URL, the attached Postgres service, and environment.",
+                        target,
+                        label,
+                        timeout,
+                    )
         if attempt == attempts:
             raise TimeoutError("Could not connect to any configured Postgres URL")
         await sleep(2)
