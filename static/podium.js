@@ -496,8 +496,13 @@ function renderRequirementsSlide(slide) {
   const capturedIds = capturedRequirementResponseIds(captured);
   const availableResponses = responses.filter((r) => !capturedIds.has(r.id));
   const incoming = availableResponses.map((r) => `<article class="idea-card requirements-idea-card" draggable="true" data-response="${r.id}"><p>${esc(r.payload?.text || "")}</p><button class="btn secondary" data-capture="${r.id}">Capture</button></article>`).join("");
-  const capturedHtml = captured.map((item, index) => `<li><span>${esc(item.text || item)}</span><button class="btn secondary" data-remove-req="${index}">Remove</button></li>`).join("");
-  slideShell(slide, `<div class="curation-layout"><section><h2>Incoming ideas</h2><div class="idea-pool requirements-idea-pool">${incoming || '<p class="muted">Waiting for student ideas...</p>'}</div></section><section class="captured-requirements drop-zone" data-requirements-drop="true"><h2>Captured requirements</h2><ol id="captured-list">${capturedHtml}</ol><p class="muted">Drag useful ideas here. These appear in the phone brief for the second bot round.</p></section></div>`);
+  const capturedHtml = captured.map((item, index) => `<li><span>${esc(item.text || item)}</span><button class="req-remove" data-remove-req="${index}" aria-label="Remove requirement">Remove</button></li>`).join("");
+  const incomingCount = availableResponses.length ? ` <span class="count-pill">${availableResponses.length}</span>` : "";
+  const capturedCount = captured.length ? ` <span class="count-pill">${captured.length}</span>` : "";
+  const capturedBody = captured.length
+    ? `<ol id="captured-list" class="captured-list">${capturedHtml}</ol><p class="muted curation-foot">These become the phone brief for the second bot round.</p>`
+    : `<p class="muted empty-hint">Nothing captured yet. Drag an idea across, or hit Capture — your picks become the phone brief for round two.</p>`;
+  slideShell(slide, `<div class="curation-layout"><section class="incoming-col"><h2>Incoming ideas${incomingCount}</h2><div class="idea-pool requirements-idea-pool">${incoming || '<p class="muted empty-hint">No ideas yet — they appear here as students send them.</p>'}</div></section><section class="captured-requirements" data-requirements-drop="true"><h2>Captured requirements${capturedCount}</h2>${capturedBody}</section></div>`);
   document.querySelectorAll("[data-capture]").forEach((button) => (button.onclick = () => captureRequirementResponse(slide.id, button.dataset.capture)));
   document.querySelectorAll("[data-remove-req]").forEach((button) => (button.onclick = () => {
     const next = captured.filter((_, index) => index !== Number(button.dataset.removeReq));
@@ -507,8 +512,13 @@ function renderRequirementsSlide(slide) {
   const dropZone = document.querySelector("[data-requirements-drop]");
   if (dropZone) {
     dropZone.ondragover = allowDrop;
+    dropZone.ondragenter = () => dropZone.classList.add("drag-over");
+    dropZone.ondragleave = (event) => {
+      if (!dropZone.contains(event.relatedTarget)) dropZone.classList.remove("drag-over");
+    };
     dropZone.ondrop = (event) => {
       event.preventDefault();
+      dropZone.classList.remove("drag-over");
       captureRequirementResponse(slide.id, event.dataTransfer.getData("text/plain"));
     };
   }

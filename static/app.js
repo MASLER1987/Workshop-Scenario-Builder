@@ -14,7 +14,13 @@ let state = {
   mode: "init",
   streaming: false,
   notice: "",
+  noticeKind: "",
 };
+
+function noticeHtml() {
+  if (!state.notice) return "";
+  return `<p class="notice ${state.noticeKind === "success" ? "success" : ""}">${esc(state.notice)}</p>`;
+}
 
 const api = (url, opt = {}) =>
   fetch(url, { headers: { "Content-Type": "application/json" }, ...opt }).then(async (r) => {
@@ -79,6 +85,7 @@ async function load() {
     state.mode = state.presentation?.participant_mode === "results" && state.run ? "transcript" : "editor";
     state.streaming = false;
     state.notice = "";
+    state.noticeKind = "";
     render();
   } catch (e) {
     localStorage.clear();
@@ -118,6 +125,7 @@ async function streamRun(url, opt) {
   state.mode = "transcript";
   state.streaming = true;
   state.notice = "";
+  state.noticeKind = "";
   render();
   try {
     const response = await fetch(url, { headers: { "Content-Type": "application/json" }, ...opt });
@@ -195,7 +203,7 @@ function renderTranscript() {
       : state.run.ended_reason === "error"
         ? "ended with an error"
         : "reached turn limit";
-  app.innerHTML = `<section class="phone-screen test-view"><header class="bot-workspace-head test-head"><div><span class="eyebrow">Bot test</span><h1>v${state.run.version_number || state.version || "new"}</h1></div><span class="tag">${reason}</span></header>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}<div class="chat transcript-chat">${chat(state.run.transcript)}</div>${scorePanel(state.run.score)}</section><div class="bar"><button class="btn primary" id="edit" ${state.streaming ? "disabled" : ""}>Edit instruction</button><button class="btn secondary" id="again" ${state.streaming ? "disabled" : ""}>Run again</button></div>`;
+  app.innerHTML = `<section class="phone-screen test-view"><header class="bot-workspace-head test-head"><div><span class="eyebrow">Bot test</span><h1>v${state.run.version_number || state.version || "new"}</h1></div><span class="tag">${reason}</span></header>${noticeHtml()}<div class="chat transcript-chat">${chat(state.run.transcript)}</div>${scorePanel(state.run.score)}</section><div class="bar"><button class="btn primary" id="edit" ${state.streaming ? "disabled" : ""}>Edit instruction</button><button class="btn secondary" id="again" ${state.streaming ? "disabled" : ""}>Run again</button></div>`;
   $("#edit").onclick = () => {
     if (state.streaming) return;
     state.mode = "editor";
@@ -242,7 +250,7 @@ function renderPassive(slide) {
 }
 
 function renderQna(slide) {
-  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Q&A")}${activeSlideBanner(slide)}<div class="companion input-companion"><p class="eyebrow">On screen</p><h1>${esc(slide?.title || "Questions")}</h1><p class="muted">Ask a question for the presenters.</p><textarea id="question" maxlength="500" class="short phone-textarea" placeholder="Type your question..."></textarea><div class="phone-action"><button class="btn primary" id="send-question">Send question</button></div>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</div></section>`;
+  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Q&A")}${activeSlideBanner(slide)}<div class="companion input-companion"><p class="eyebrow">On screen</p><h1>${esc(slide?.title || "Questions")}</h1><p class="muted">Ask a question for the presenters.</p><textarea id="question" maxlength="500" class="short phone-textarea" placeholder="Type your question..."></textarea>${noticeHtml()}<div class="phone-action"><button class="btn primary" id="send-question">Send question</button></div></div></section>`;
   $("#send-question").onclick = submitQuestion;
 }
 
@@ -251,17 +259,18 @@ async function submitQuestion() {
   if (!text) return;
   await api(`/api/sessions/${state.sid}/questions`, { method: "POST", body: JSON.stringify({ text }) });
   state.notice = "Question sent.";
+  state.noticeKind = "success";
   renderQna(activeSlide());
 }
 
 function renderRequirements(slide) {
-  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Requirements")}${activeSlideBanner(slide, "Interactive now")}<div class="companion input-companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "What matters for intake?")}</h1><p>Suggest something the bot should collect, avoid, or explain.</p><textarea id="response" maxlength="160" class="short phone-textarea" placeholder="${esc(state.presentation?.interaction?.placeholder || "Your idea...")}"></textarea><div class="phone-action"><button class="btn primary" id="send-response">Send idea</button></div>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</div></section>`;
+  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Requirements")}${activeSlideBanner(slide, "Interactive now")}<div class="companion input-companion"><h1>What should the bot collect, avoid, or explain?</h1><textarea id="response" maxlength="160" class="short phone-textarea compact-textarea" placeholder="${esc(state.presentation?.interaction?.placeholder || "Your idea...")}"></textarea>${noticeHtml()}<div class="phone-action"><button class="btn primary" id="send-response">Send idea</button></div></div></section>`;
   $("#send-response").onclick = () => submitResponse("requirements");
 }
 
 function renderProcess(slide) {
   const suggestions = (state.responses || []).map((item) => `<li><button class="vote" data-vote="${item.id}">+${item.votes || 0}</button><span>${esc(item.payload?.text || "")}</span></li>`).join("");
-  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Process map")}${activeSlideBanner(slide, "Interactive now")}<div class="companion input-companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "Matter intake stages")}</h1><p>Suggest a stage, or upvote one that looks useful.</p><textarea id="response" maxlength="100" class="short phone-textarea" placeholder="${esc(state.presentation?.interaction?.placeholder || "Suggest a stage...")}"></textarea><div class="phone-action"><button class="btn primary" id="send-response">Send stage</button></div><ul class="phone-list">${suggestions}</ul>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</div></section>`;
+  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Process map")}${activeSlideBanner(slide, "Interactive now")}<div class="companion input-companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "Matter intake stages")}</h1><p>Suggest a stage, or upvote one that looks useful.</p><textarea id="response" maxlength="100" class="short phone-textarea compact-textarea" placeholder="${esc(state.presentation?.interaction?.placeholder || "Suggest a stage...")}"></textarea>${noticeHtml()}<div class="phone-action"><button class="btn primary" id="send-response">Send stage</button></div><ul class="phone-list">${suggestions}</ul></div></section>`;
   $("#send-response").onclick = () => submitResponse("process");
   document.querySelectorAll("[data-vote]").forEach((button) => (button.onclick = () => voteResponse(button.dataset.vote)));
 }
@@ -277,7 +286,8 @@ async function submitResponse(type) {
       payload: { text },
     }),
   });
-  state.notice = "Sent.";
+  state.notice = type === "process" ? "Stage sent." : "Idea sent.";
+  state.noticeKind = "success";
   await loadPresentationState();
   render();
 }
