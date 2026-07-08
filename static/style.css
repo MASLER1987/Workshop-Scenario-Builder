@@ -43,7 +43,19 @@ textarea.short{min-height:130px}
 .outcomes li{counter-increment:outcome;display:grid;grid-template-columns:38px 1fr;gap:10px;align-items:center;background:var(--surface-soft);border:1px solid var(--line);border-radius:8px;padding:12px}
 .outcomes li::before{content:counter(outcome);display:grid;place-items:center;width:32px;height:32px;border-radius:999px;background:var(--brand-navy);color:white;font-weight:900}
 .top{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.bot-builder-view,.test-view{display:flex;flex-direction:column;gap:14px;min-height:calc(100dvh - 128px - env(safe-area-inset-top) - env(safe-area-inset-bottom))}
+.bot-workspace-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line-soft)}
+.bot-workspace-head strong{display:block;color:var(--muted);font-size:14px;margin-bottom:3px;overflow-wrap:anywhere}
+.bot-workspace-head h1{font-size:28px;margin:0;color:var(--brand-navy);letter-spacing:-.02em}
+.test-head h1{font-size:34px}
 .badge,.tag{font-size:13px;color:var(--brand-navy);background:var(--surface-soft);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
+.instruction-editor{display:flex;flex:1;min-height:0;flex-direction:column;gap:8px;font-weight:900}
+.instruction-editor span{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--brand-teal)}
+.instruction-input{flex:1;min-height:clamp(360px,58dvh,720px);line-height:1.45;border-radius:14px;background:#fbfdfc;box-shadow:inset 0 1px 0 #19254308}
+.class-requirements{background:var(--surface-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.class-requirements h2{font-size:15px;margin:0 0 8px}
+.class-requirements ul{margin:0;padding-left:19px}
+.class-requirements li{margin:4px 0}
 .bar{position:fixed;left:50%;bottom:0;transform:translateX(-50%);max-width:520px;width:100%;display:flex;gap:10px;padding:14px max(18px,env(safe-area-inset-left)) calc(14px + env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-right));background:rgba(255,255,255,.97);border-top:1px solid var(--line);box-shadow:0 -12px 34px #19254314;z-index:5}
 .bar .btn{flex:1;min-width:0}
 .btn{border:0;border-radius:999px;min-height:48px;padding:14px 18px;font-weight:800;cursor:pointer;touch-action:manipulation}
@@ -56,6 +68,7 @@ textarea.short{min-height:130px}
 .close{float:right}
 
 .chat{display:flex;flex-direction:column;gap:12px}
+.transcript-chat{flex:1;min-height:180px;padding-bottom:2px}
 .msg{max-width:min(86%,420px);padding:12px 14px;border-radius:18px;white-space:pre-wrap;overflow-wrap:anywhere}
 .client{align-self:flex-start;background:#f0f2f5}
 .bot{align-self:flex-end;background:#e2f4ef}
@@ -278,6 +291,13 @@ textarea.short{min-height:130px}
   .outcomes li{grid-template-columns:34px 1fr;padding:11px}
   .top{align-items:flex-start}
   .top h2{font-size:24px;margin:0}
+  .bot-builder-view,.test-view{gap:12px;min-height:calc(100dvh - 118px - env(safe-area-inset-top) - env(safe-area-inset-bottom))}
+  .bot-workspace-head{align-items:flex-start;gap:10px}
+  .bot-workspace-head h1{font-size:25px}
+  .test-head h1{font-size:30px}
+  .tag,.badge{font-size:12px;padding:4px 9px;white-space:normal;text-align:right}
+  .instruction-input{min-height:52dvh;border-radius:12px}
+  .class-requirements{padding:11px 12px}
   textarea{min-height:58dvh}
   textarea.short{min-height:150px}
   .companion h1{font-size:30px}

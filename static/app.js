@@ -46,9 +46,10 @@ function render() {
     renderCompanion(participantMode);
     return;
   }
-  app.innerHTML = `<div class="top"><strong>${esc(state.name)}</strong><span class="badge">v${state.version || "new"}</span></div><h2>Write your chatbot instruction</h2>${capturedRequirementsHtml()}<textarea id="instruction" maxlength="4000" placeholder="Write the instructions for your intake chatbot...">${esc(state.instruction)}</textarea><div class="bar"><button class="btn secondary" id="brief">Client brief</button><button class="btn primary" id="run">Run test</button></div>`;
+  app.innerHTML = `<section class="bot-builder-view"><header class="bot-workspace-head"><div><strong>${esc(state.name)}</strong><h1>Write your bot instructions</h1></div><span class="badge">v${state.version || "new"}</span></header>${capturedRequirementsHtml()}<label class="instruction-editor" for="instruction"><span>Instructions</span><textarea id="instruction" class="instruction-input" maxlength="4000" placeholder="Write the instructions for your intake chatbot...">${esc(state.instruction)}</textarea></label></section><div class="bar"><button class="btn secondary" id="brief">Client brief</button><button class="btn primary" id="run" ${state.instruction.trim() ? "" : "disabled"}>Run test</button></div>`;
   $("#instruction").oninput = (e) => {
     state.instruction = e.target.value;
+    $("#run").disabled = !state.instruction.trim();
     saveDraft();
   };
   $("#brief").onclick = drawer;
@@ -194,7 +195,7 @@ function renderTranscript() {
       : state.run.ended_reason === "error"
         ? "ended with an error"
         : "reached turn limit";
-  app.innerHTML = `<div class="top"><h2>Test - v${state.run.version_number || state.version || "new"}</h2><span class="tag">${reason}</span></div>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}<div class="chat">${chat(state.run.transcript)}</div>${scorePanel(state.run.score)}<div class="bar"><button class="btn primary" id="edit" ${state.streaming ? "disabled" : ""}>Edit instruction</button><button class="btn secondary" id="again" ${state.streaming ? "disabled" : ""}>Run again</button></div>`;
+  app.innerHTML = `<section class="test-view"><header class="bot-workspace-head test-head"><div><span class="eyebrow">Bot test</span><h1>v${state.run.version_number || state.version || "new"}</h1></div><span class="tag">${reason}</span></header>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}<div class="chat transcript-chat">${chat(state.run.transcript)}</div>${scorePanel(state.run.score)}</section><div class="bar"><button class="btn primary" id="edit" ${state.streaming ? "disabled" : ""}>Edit instruction</button><button class="btn secondary" id="again" ${state.streaming ? "disabled" : ""}>Run again</button></div>`;
   $("#edit").onclick = () => {
     if (state.streaming) return;
     state.mode = "editor";
@@ -298,7 +299,7 @@ function drawer() {
 function capturedRequirementsHtml() {
   const items = state.captured_requirements?.items || [];
   if (!items.length) return "";
-  return `<h3>Class requirements</h3><ul>${items.map((item) => `<li>${esc(item.text || item)}</li>`).join("")}</ul>`;
+  return `<section class="class-requirements"><h2>Class requirements</h2><ul>${items.map((item) => `<li>${esc(item.text || item)}</li>`).join("")}</ul></section>`;
 }
 
 function chat(t) {

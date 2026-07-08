@@ -10,9 +10,9 @@ class StaticAssetTests(unittest.TestCase):
         html = (ROOT / "static" / "index.html").read_text()
 
         self.assertIn('viewport-fit=cover', html)
-        self.assertIn('/static/style.css?v=presentation-21', html)
+        self.assertIn('/static/style.css?v=presentation-22', html)
         self.assertIn('/static/presentation.js?v=presentation-18', html)
-        self.assertIn('/static/app.js?v=presentation-18', html)
+        self.assertIn('/static/app.js?v=presentation-22', html)
 
     def test_podium_cache_busts_assets(self):
         html = (ROOT / "static" / "podium.html").read_text()
@@ -75,6 +75,18 @@ class StaticAssetTests(unittest.TestCase):
         self.assertIn(".bar .btn{flex:1", style)
         self.assertIn("@media(max-width:430px)", style)
         self.assertIn("touch-action:manipulation", style)
+
+    def test_bot_builder_and_test_views_have_mobile_layout_hooks(self):
+        script = (ROOT / "static" / "app.js").read_text()
+        style = (ROOT / "static" / "style.css").read_text()
+
+        self.assertIn("bot-builder-view", script)
+        self.assertIn("instruction-input", script)
+        self.assertIn("test-view", script)
+        self.assertIn("transcript-chat", script)
+        self.assertIn(".bot-builder-view,.test-view", style)
+        self.assertIn(".instruction-input{flex:1", style)
+        self.assertIn(".transcript-chat{flex:1", style)
 
 
 if __name__ == "__main__":
