@@ -14,6 +14,7 @@ let deckSlides = PRESENTATION_SLIDES;
 let deckPersisted = false;
 let slideOverrides = {};
 let selectedSlideIndex = 0;
+let draggingSlideId = null;
 
 const api = (u, o = {}) =>
   fetch(u + (u.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(key), {
@@ -144,7 +145,7 @@ function renderByTemplate(slide) {
 
 function slideShell(slide, body) {
   const section = slide.section ? `<span class="slide-section">${esc(slide.section)}</span>` : "";
-  app.innerHTML = `<div class="podium-shell presentation-shell template-${esc(slide.template || "standard")}"><header class="presentation-top"><div class="slide-heading"><div class="brand-row">${brandMark()}${section}</div><h1>${esc(slide.title)}</h1></div><div class="join-box" aria-label="Join on your phone"><img class="qr-code" src="${esc(qrImageUrl())}" alt="QR code for participant app"><span class="join-caption">Scan to join</span></div></header>${body}<footer class="presentation-controls"><div class="presenter-nav"><button class="btn secondary" id="prev">Back</button><span class="slide-count">${selectedSlideIndex + 1}<i>/</i>${deckSlides.length}</span><button class="btn primary" id="next">Next</button></div><div class="presenter-tools"><button class="btn ghost" id="slide-list">Slide list</button><button class="btn ghost" id="edit-slide">Edit slide</button><button class="btn ghost" id="grid">Live grid</button><button class="btn ghost" id="reset">Reset</button></div></footer></div>`;
+  app.innerHTML = `<div class="podium-shell presentation-shell template-${esc(slide.template || "standard")}"><header class="presentation-top"><div class="slide-heading"><div class="brand-row">${brandMark()}${section}</div><h1>${esc(slide.title)}</h1></div><div class="join-box" aria-label="Join on your phone"><img class="qr-code" src="${esc(qrImageUrl())}" alt="QR code for participant app"><span class="join-caption">Scan to join</span></div></header>${body}<footer class="presentation-controls"><div class="presenter-nav"><button class="btn secondary" id="prev">Back</button><span class="slide-count">${selectedSlideIndex + 1}<i>/</i>${deckSlides.length}</span><button class="btn primary" id="next">Next</button></div><div class="presenter-tools"><button class="btn ghost" id="slide-list">Slide list</button><button class="btn ghost" id="edit-slide">Edit slide</button><button class="btn ghost" id="grid">Live grid</button><button class="btn ghost" id="reset">Reset</button></div></footer><div class="presenter-hint" aria-hidden="true">Controls</div></div>`;
   document.querySelector("#prev").onclick = () => activateSlide(selectedSlideIndex - 1);
   document.querySelector("#next").onclick = () => activateSlide(selectedSlideIndex + 1);
   document.querySelector("#slide-list").onclick = renderSlideList;
@@ -161,7 +162,7 @@ function renderSlideList() {
   document.querySelector(".slide-list-panel")?.remove();
   const rows = deckSlides.map((slide, index) => {
     const isLive = index === selectedSlideIndex;
-    return `<article class="slide-row ${isLive ? "selected" : ""}" draggable="true" data-slide-id="${esc(slide.id)}"><span class="drag-handle">::</span><button class="quick-nav-arrow" data-go-slide="${index}" aria-label="Go to slide ${index + 1}">-></button><button class="slide-row-main" data-go-slide="${index}"><strong>${index + 1}. ${esc(slide.title || "Untitled slide")}${isLive ? '<span class="live-slide-pill">Live</span>' : ""}</strong><small>${esc(slide.section || "slide")} · ${esc(slide.template || "standard")} · phone: ${esc(slide.participantMode || "passive")}</small></button><button class="btn secondary" data-edit-row="${index}">Edit</button></article>`;
+    return `<article class="slide-row ${isLive ? "selected" : ""}" data-slide-id="${esc(slide.id)}"><span class="drag-handle" draggable="true" data-drag-slide="${esc(slide.id)}" role="button" tabindex="0" aria-label="Drag slide ${index + 1}">::</span><button class="quick-nav-arrow" data-go-slide="${index}" aria-label="Go to slide ${index + 1}">-></button><button class="slide-row-main" data-go-slide="${index}"><strong>${index + 1}. ${esc(slide.title || "Untitled slide")}${isLive ? '<span class="live-slide-pill">Live</span>' : ""}</strong><small>${esc(slide.section || "slide")} · ${esc(slide.template || "standard")} · phone: ${esc(slide.participantMode || "passive")}</small></button><button class="btn secondary" data-edit-row="${index}">Edit</button></article>`;
   }).join("");
   document.body.insertAdjacentHTML("beforeend", `<aside class="slide-list-panel"><header><div><span class="eyebrow">Deck</span><h2>Slide list</h2></div><button type="button" class="icon-close" id="close-slide-list" aria-label="Close">x</button></header><div class="slide-list-actions"><button class="btn primary" id="new-slide">New slide</button><span>${deckPersisted ? "Saved in Railway" : "Using bundled deck"}</span></div><div class="slide-rows">${rows}</div></aside>`);
   document.querySelector("#close-slide-list").onclick = closeSlideList;
@@ -179,13 +180,42 @@ function closeSlideList() {
 }
 
 function bindSlideRows() {
-  document.querySelectorAll(".slide-row[draggable]").forEach((row) => {
-    row.ondragstart = (event) => event.dataTransfer.setData("text/plain", row.dataset.slideId);
-    row.ondragover = allowDrop;
+  document.querySelectorAll(".drag-handle[draggable]").forEach((handle) => {
+    handle.ondragstart = (event) => {
+      draggingSlideId = handle.dataset.dragSlide;
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", draggingSlideId);
+      handle.closest(".slide-row")?.classList.add("dragging");
+    };
+    handle.ondragend = clearSlideDragState;
+  });
+  document.querySelectorAll(".slide-row[data-slide-id]").forEach((row) => {
+    row.ondragenter = (event) => {
+      if (!draggingSlideId || row.dataset.slideId === draggingSlideId) return;
+      event.preventDefault();
+      row.classList.add("drop-target");
+    };
+    row.ondragleave = (event) => {
+      if (!row.contains(event.relatedTarget)) row.classList.remove("drop-target");
+    };
+    row.ondragover = (event) => {
+      if (!draggingSlideId || row.dataset.slideId === draggingSlideId) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+    };
     row.ondrop = (event) => {
       event.preventDefault();
-      reorderSlide(event.dataTransfer.getData("text/plain"), row.dataset.slideId);
+      const sourceId = event.dataTransfer.getData("text/plain") || draggingSlideId;
+      clearSlideDragState();
+      reorderSlide(sourceId, row.dataset.slideId);
     };
+  });
+}
+
+function clearSlideDragState() {
+  draggingSlideId = null;
+  document.querySelectorAll(".slide-row.dragging, .slide-row.drop-target").forEach((row) => {
+    row.classList.remove("dragging", "drop-target");
   });
 }
 
@@ -556,6 +586,29 @@ function labelFor(key) {
 function esc(s = "") {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+
+function inPresentation() {
+  return viewMode === "presentation" && !detail;
+}
+
+document.addEventListener("keydown", (event) => {
+  const target = event.target;
+  const tag = (target?.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select" || target?.isContentEditable) return;
+  if (!inPresentation() || document.querySelector(".edit-slide-panel")) return;
+  if (event.key === "ArrowRight" || event.key === "PageDown") {
+    event.preventDefault();
+    activateSlide(selectedSlideIndex + 1);
+  } else if (event.key === "ArrowLeft" || event.key === "PageUp") {
+    event.preventDefault();
+    activateSlide(selectedSlideIndex - 1);
+  }
+});
+
+document.addEventListener("mousemove", (event) => {
+  const nearBottom = inPresentation() && event.clientY > window.innerHeight - 132;
+  app.classList.toggle("reveal-controls", nearBottom);
+});
 
 setInterval(async () => {
   try {
