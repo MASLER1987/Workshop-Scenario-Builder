@@ -152,9 +152,8 @@ textarea.short{min-height:130px}
 .presentation-card{background:transparent;border:0;border-radius:0;padding:clamp(18px,2vw,34px) 0;box-shadow:none;flex:1}
 .presentation-card p{font-size:clamp(28px,2.8vw,52px);line-height:1.15;margin:0 0 28px;max-width:1200px}
 .presentation-card li{font-size:clamp(24px,2vw,38px);margin:12px 0}
-.standard-slide ul{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin:26px 0 0;padding:0;list-style:none}
-.standard-slide li{display:flex;align-items:center;gap:16px;background:var(--surface-soft);border:1px solid var(--line);border-left:5px solid var(--brand-mint);border-radius:10px;padding:18px 22px;font-weight:850}
-.standard-slide li::before{content:"";flex:none;width:12px;height:12px;border-radius:999px;background:var(--brand-teal)}
+.standard-slide ul{display:grid;grid-template-columns:1fr;gap:14px;margin:26px 0 0;padding:0;list-style:none}
+.standard-slide li{background:var(--surface-soft);border:1px solid var(--line);border-radius:10px;padding:18px 22px;font-weight:850}
 .interaction-slide{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(280px,.85fr);gap:28px;align-items:stretch}
 .activity-metrics{display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:12px;margin:28px 0}
 .activity-metrics span{background:var(--surface-soft);border:1px solid var(--line);border-radius:8px;padding:18px;font-weight:900;color:var(--muted)}
