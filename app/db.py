@@ -1,27 +1,96 @@
 import json
+import logging
 import os
 import uuid
+from asyncio import sleep
 from typing import Any
+from urllib.parse import urlparse
 
 import asyncpg
 
 from .seed import SCENARIOS
 
 _pool: asyncpg.Pool | None = None
+logger = logging.getLogger("prompt_playground.db")
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, str(default)))
+    except ValueError:
+        return default
+
+
+def database_urls() -> list[str]:
+    urls = []
+    for name in ("DATABASE_URL", "DATABASE_PUBLIC_URL", "POSTGRES_URL"):
+        url = os.environ.get(name)
+        if url and url not in urls:
+            urls.append(url)
+    if not urls:
+        raise RuntimeError("DATABASE_URL is required")
+    return urls
+
+
+def describe_database_url(url: str) -> str:
+    parsed = urlparse(url)
+    host = parsed.hostname or "unknown-host"
+    port = parsed.port or 5432
+    database = parsed.path or ""
+    return f"{parsed.scheme}://{host}:{port}{database}"
 
 async def connect() -> None:
     global _pool
-    url = os.environ.get("DATABASE_URL")
-    if not url:
-        raise RuntimeError("DATABASE_URL is required")
+    if _pool is not None:
+        return
+    urls = database_urls()
+    attempts = max(1, _env_int("DB_CONNECT_ATTEMPTS", 3))
+    timeout = max(1.0, _env_float("DB_CONNECT_TIMEOUT", 8.0))
+    min_size = max(0, _env_int("DB_POOL_MIN_SIZE", 1))
+    max_size = max(1, _env_int("DB_POOL_MAX_SIZE", 10))
+    min_size = min(min_size, max_size)
+
     async def init(con):
         await con.set_type_codec("jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
         await con.set_type_codec("json", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
-    _pool = await asyncpg.create_pool(url, min_size=1, max_size=10, init=init)
+
+    for attempt in range(1, attempts + 1):
+        for url in urls:
+            target = describe_database_url(url)
+            try:
+                logger.info("Connecting to Postgres at %s (attempt %s/%s)", target, attempt, attempts)
+                _pool = await asyncpg.create_pool(
+                    url,
+                    min_size=min_size,
+                    max_size=max_size,
+                    init=init,
+                    timeout=timeout,
+                    command_timeout=30,
+                )
+                return
+            except (TimeoutError, OSError, asyncpg.PostgresError):
+                logger.exception(
+                    "Could not connect to Postgres at %s within %.1fs. "
+                    "Check Railway DATABASE_URL, the attached Postgres service, and environment.",
+                    target,
+                    timeout,
+                )
+        if attempt == attempts:
+            raise TimeoutError("Could not connect to any configured Postgres URL")
+        await sleep(2)
 
 async def close() -> None:
+    global _pool
     if _pool:
         await _pool.close()
+        _pool = None
 
 async def pool() -> asyncpg.Pool:
     if not _pool:

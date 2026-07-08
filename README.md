@@ -14,10 +14,14 @@ A single FastAPI service for live workshops where participants write generic fam
 | Var | Purpose |
 | --- | --- |
 | `DATABASE_URL` | Railway Postgres connection string, injected by the Railway Postgres service |
+| `DATABASE_PUBLIC_URL` | Optional fallback Railway Postgres public connection string |
+| `POSTGRES_URL` | Optional fallback Postgres connection string |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
 | `PODIUM_KEY` | Shared secret for `/podium?key=...` and podium API routes |
 | `ACTIVE_SCENARIO_ID` | Optional scenario override; otherwise each run selects randomly from the family scenario pool |
 | `MAX_ACTIVE_RUNS` | Optional global LLM run cap per service instance; defaults to `10` |
+| `DB_CONNECT_ATTEMPTS` | Optional Postgres startup retry count; defaults to `3` |
+| `DB_CONNECT_TIMEOUT` | Optional per-attempt Postgres startup timeout in seconds; defaults to `8` |
 
 ## Run locally
 
@@ -55,10 +59,12 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
 Attach Railway Postgres to the app service. Railway should inject `DATABASE_URL`; do not hardcode a database URL in the repo.
 
-On startup, the FastAPI service uses `DATABASE_URL` and creates/updates the required schema in Railway Postgres, including sessions, runs, scenarios, presentation state, Q&A, responses, votes, and curated presentation artifacts.
+On startup, the FastAPI service uses `DATABASE_URL` and creates/updates the required schema in Railway Postgres, including sessions, runs, scenarios, presentation state, Q&A, responses, votes, and curated presentation artifacts. If `DATABASE_URL` is unavailable or unreachable, the app can also try `DATABASE_PUBLIC_URL` and `POSTGRES_URL` when those variables are present.
 
 Set these service variables manually:
 
 - `ANTHROPIC_API_KEY`
 - `PODIUM_KEY`
 - `MAX_ACTIVE_RUNS` optional, defaults to `10`
+
+If Railway returns `502` during startup and logs show a Postgres connection timeout, check that the app service and Postgres service are in the same Railway project/environment and that the app service has the Postgres variable reference attached. The app logs the host and database name it is trying to reach without printing credentials.
