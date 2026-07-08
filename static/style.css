@@ -22,11 +22,11 @@ input:focus,textarea:focus,select:focus{outline:3px solid #00a6c533;border-color
 textarea{min-height:68dvh;resize:vertical}
 textarea.short{min-height:130px}
 
-.brand-mark{display:inline-flex;align-items:center;gap:4px;color:var(--brand-navy);font-weight:950;letter-spacing:-.04em;line-height:1}
-.brand-mark strong{font-size:clamp(34px,3vw,52px)}
-.brand-mark span{display:block;width:7px;height:7px;border-radius:999px;background:var(--brand-teal)}
-.brand-mark span:nth-child(3){background:var(--brand-mint)}
-.brand-mark span:nth-child(4){background:var(--brand-teal)}
+.brand-mark{display:inline-flex;align-items:center;gap:5px;color:var(--brand-navy);line-height:1}
+.brand-mark strong{font-family:"Arial Black","Aptos Black","Segoe UI Black",Arial,sans-serif;font-size:clamp(34px,3vw,52px);font-weight:950;letter-spacing:-.09em;transform:scaleX(1.08);transform-origin:left center}
+.brand-dots{display:inline-flex;flex-direction:column;gap:3px;align-self:center;transform:translateY(1px)}
+.brand-dots i{display:block;width:.16em;height:.16em;min-width:7px;min-height:7px;max-width:9px;max-height:9px;border-radius:999px;background:var(--brand-teal)}
+.brand-dots i:first-child{background:var(--brand-mint)}
 .phone{width:min(100%,520px);margin:0 auto;min-height:100dvh;background:white;padding:calc(20px + env(safe-area-inset-top)) max(18px,env(safe-area-inset-left)) calc(104px + env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-right));overflow-x:hidden}
 .phone-screen{display:flex;flex-direction:column;gap:14px;min-height:calc(100dvh - 124px - env(safe-area-inset-top) - env(safe-area-inset-bottom));min-width:0}
 .phone-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:14px;margin-bottom:6px;border-bottom:1px solid var(--line-soft)}

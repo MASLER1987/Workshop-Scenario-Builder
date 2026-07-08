@@ -10,16 +10,16 @@ class StaticAssetTests(unittest.TestCase):
         html = (ROOT / "static" / "index.html").read_text()
 
         self.assertIn('viewport-fit=cover', html)
-        self.assertIn('/static/style.css?v=presentation-25', html)
+        self.assertIn('/static/style.css?v=presentation-26', html)
         self.assertIn('/static/presentation.js?v=presentation-18', html)
-        self.assertIn('/static/app.js?v=presentation-27', html)
+        self.assertIn('/static/app.js?v=presentation-28', html)
 
     def test_podium_cache_busts_assets(self):
         html = (ROOT / "static" / "podium.html").read_text()
 
-        self.assertIn('/static/style.css?v=presentation-22', html)
+        self.assertIn('/static/style.css?v=presentation-23', html)
         self.assertIn('/static/presentation.js?v=presentation-20', html)
-        self.assertIn('/static/podium.js?v=presentation-24', html)
+        self.assertIn('/static/podium.js?v=presentation-25', html)
 
     def test_participant_stream_loop_yields_to_browser_paint(self):
         script = (ROOT / "static" / "app.js").read_text()
@@ -99,6 +99,8 @@ class StaticAssetTests(unittest.TestCase):
         self.assertIn("--brand-teal:#00a6c5", style)
         self.assertIn("--brand-mint:#89c8a2", style)
         self.assertIn(".brand-mark", style)
+        self.assertIn(".brand-dots", style)
+        self.assertIn(".brand-dots i:first-child", style)
         self.assertIn(".join-box{position:absolute;top:0;right:0", style)
 
     def test_participant_mobile_layout_uses_safe_native_viewport(self):

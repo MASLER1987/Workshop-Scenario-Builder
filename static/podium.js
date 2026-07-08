@@ -135,7 +135,7 @@ function qrImageUrl() {
 }
 
 function brandMark() {
-  return '<div class="brand-mark" aria-label="VWV"><strong>vwv</strong><span></span><span></span><span></span></div>';
+  return '<div class="brand-mark" aria-label="VWV"><strong>VWV</strong><span class="brand-dots"><i></i><i></i><i></i></span></div>';
 }
 
 async function renderPresentation() {
