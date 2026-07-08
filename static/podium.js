@@ -16,6 +16,17 @@ let slideOverrides = {};
 let selectedSlideIndex = 0;
 let draggingSlideId = null;
 
+const SLIDE_TEMPLATE_OPTIONS = [
+  { value: "standard", label: "Standard slide", participantMode: "passive", podiumType: "slide" },
+  { value: "interaction", label: "Bot building slide", participantMode: "bot", podiumType: "activity" },
+  { value: "bot-results", label: "Bot results slide", participantMode: "results", podiumType: "live" },
+  { value: "qna-review", label: "Q&A review slide", participantMode: "qna", podiumType: "interactive" },
+  { value: "requirements-capture", label: "Requirements capture", participantMode: "requirements", podiumType: "interactive", interaction: { maxLength: 160, placeholder: "What should the intake bot collect, avoid, or explain?" } },
+  { value: "workflow-capture", label: "Workflow capture", participantMode: "process", podiumType: "interactive", interaction: { maxLength: 100, placeholder: "What stage should happen in a good intake process?" } },
+];
+
+const PARTICIPANT_MODE_OPTIONS = ["passive", "bot", "results", "qna", "requirements", "process"];
+
 const api = (u, o = {}) =>
   fetch(u + (u.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(key), {
     headers: { "Content-Type": "application/json" },
@@ -77,8 +88,9 @@ function effectiveSlide(slide = baseSlide()) {
     ...slide,
     ...override,
     id: slide.id,
-    template: slide.template,
-    participantMode: slide.participantMode,
+    template: override.template || slide.template,
+    participantMode: override.participantMode || slide.participantMode,
+    podiumType: override.podiumType || slide.podiumType,
   };
   if (interaction) merged.interaction = interaction;
   return merged;
@@ -90,7 +102,7 @@ function currentSlide() {
 
 async function activateSlide(index) {
   selectedSlideIndex = Math.max(0, Math.min(deckSlides.length - 1, index));
-  const slide = baseSlide();
+  const slide = currentSlide();
   await api("/api/podium/presentation/activate", {
     method: "POST",
     body: JSON.stringify({ slide_id: slide.id, mode: slide.participantMode }),
@@ -295,13 +307,30 @@ function blankSlidePayload() {
   return {
     title: "Untitled slide",
     section: "custom",
-    template: "standard",
-    podiumType: "slide",
-    participantMode: "passive",
+    ...templateDefaults("standard"),
     body: "",
     bullets: [],
     durationSeconds: 180,
   };
+}
+
+function templateDefaults(template) {
+  const option = SLIDE_TEMPLATE_OPTIONS.find((item) => item.value === template) || SLIDE_TEMPLATE_OPTIONS[0];
+  const defaults = {
+    template: option.value,
+    podiumType: option.podiumType,
+    participantMode: option.participantMode,
+  };
+  if (option.interaction) defaults.interaction = { ...option.interaction };
+  return defaults;
+}
+
+function optionHtml(options, selectedValue) {
+  return options.map((option) => {
+    const value = typeof option === "string" ? option : option.value;
+    const label = typeof option === "string" ? option : option.label;
+    return `<option value="${esc(value)}" ${value === selectedValue ? "selected" : ""}>${esc(label)}</option>`;
+  }).join("");
 }
 
 function openSlideEditor(slide) {
@@ -309,11 +338,18 @@ function openSlideEditor(slide) {
   if (existing) existing.remove();
   const bullets = (slide.bullets || []).join("\n");
   const placeholder = slide.interaction?.placeholder || "";
-  document.body.insertAdjacentHTML("beforeend", `<aside class="edit-slide-panel"><form id="slide-edit-form"><header><div><span class="eyebrow">Slide editor</span><h2>${esc(slide.title)}</h2></div><button type="button" class="icon-close" id="close-editor" aria-label="Close">x</button></header><label>Section<input id="edit-section" maxlength="80" value="${esc(slide.section || "")}"></label><label>Title<input id="edit-title" maxlength="140" value="${esc(slide.title || "")}"></label><label>Body<textarea id="edit-body" rows="6">${esc(slide.body || "")}</textarea></label><label>Bullets<textarea id="edit-bullets" rows="5" placeholder="One bullet per line">${esc(bullets)}</textarea></label>${slide.interaction ? `<label>Phone prompt<textarea id="edit-placeholder" rows="3">${esc(placeholder)}</textarea></label>` : ""}<div class="edit-slide-actions"><button type="button" class="btn danger" id="delete-slide">Delete slide</button><button type="button" class="btn secondary" id="reset-slide-override">Reset default</button><button type="button" class="btn secondary" id="cancel-slide-edit">Cancel</button><button type="submit" class="btn primary">Save</button></div></form></aside>`);
+  document.body.insertAdjacentHTML("beforeend", `<aside class="edit-slide-panel"><form id="slide-edit-form"><header><div><span class="eyebrow">Slide editor</span><h2>${esc(slide.title)}</h2></div><button type="button" class="icon-close" id="close-editor" aria-label="Close">x</button></header><label>Template<select id="edit-template">${optionHtml(SLIDE_TEMPLATE_OPTIONS, slide.template || "standard")}</select></label><label>Phone mode<select id="edit-participant-mode">${optionHtml(PARTICIPANT_MODE_OPTIONS, slide.participantMode || "passive")}</select></label><label>Section<input id="edit-section" maxlength="80" value="${esc(slide.section || "")}"></label><label>Title<input id="edit-title" maxlength="140" value="${esc(slide.title || "")}"></label><label>Body<textarea id="edit-body" rows="6">${esc(slide.body || "")}</textarea></label><label>Bullets<textarea id="edit-bullets" rows="5" placeholder="One bullet per line">${esc(bullets)}</textarea></label><label>Phone prompt<textarea id="edit-placeholder" rows="3">${esc(placeholder)}</textarea></label><div class="edit-slide-actions"><button type="button" class="btn danger" id="delete-slide">Delete slide</button><button type="button" class="btn secondary" id="reset-slide-override">Reset default</button><button type="button" class="btn secondary" id="cancel-slide-edit">Cancel</button><button type="submit" class="btn primary">Save</button></div></form></aside>`);
   document.querySelector("#close-editor").onclick = closeSlideEditor;
   document.querySelector("#cancel-slide-edit").onclick = closeSlideEditor;
   document.querySelector("#reset-slide-override").onclick = () => resetSlideOverride(slide.id);
   document.querySelector("#delete-slide").onclick = () => deleteSlide(slide.id);
+  document.querySelector("#edit-template").onchange = (event) => {
+    const defaults = templateDefaults(event.target.value);
+    document.querySelector("#edit-participant-mode").value = defaults.participantMode;
+    if (defaults.interaction && !document.querySelector("#edit-placeholder").value.trim()) {
+      document.querySelector("#edit-placeholder").value = defaults.interaction.placeholder || "";
+    }
+  };
   document.querySelector("#slide-edit-form").onsubmit = (event) => {
     event.preventDefault();
     saveSlideOverride(slide);
@@ -326,22 +362,35 @@ function closeSlideEditor() {
 
 async function saveSlideOverride(slide) {
   const bulletLines = document.querySelector("#edit-bullets").value.split("\n").map((line) => line.trim()).filter(Boolean);
+  const template = document.querySelector("#edit-template").value;
+  const defaults = templateDefaults(template);
   const payload = {
+    ...defaults,
+    template: document.querySelector("#edit-template").value,
+    participantMode: document.querySelector("#edit-participant-mode").value,
     section: document.querySelector("#edit-section").value.trim(),
     title: document.querySelector("#edit-title").value.trim(),
     body: document.querySelector("#edit-body").value.trim(),
     bullets: bulletLines,
   };
   const placeholder = document.querySelector("#edit-placeholder");
-  if (placeholder && slide.interaction) {
-    payload.interaction = { placeholder: placeholder.value.trim() };
+  if (placeholder && placeholder.value.trim()) {
+    payload.interaction = { ...(payload.interaction || {}), placeholder: placeholder.value.trim() };
   }
+  await persistCurrentDeck();
   await api(`/api/podium/slides/${encodeURIComponent(slide.id)}`, {
     method: "PATCH",
     body: JSON.stringify({ payload }),
   });
   slideOverrides[slide.id] = payload;
   deckSlides = deckSlides.map((item) => item.id === slide.id ? { ...item, ...payload } : item);
+  if (currentSlide().id === slide.id) {
+    await api("/api/podium/presentation/activate", {
+      method: "POST",
+      body: JSON.stringify({ slide_id: slide.id, mode: payload.participantMode }),
+    });
+    presentationState = await api("/api/podium/presentation");
+  }
   closeSlideEditor();
   renderPresentation();
 }
@@ -460,11 +509,11 @@ function captureRequirementResponse(slideId, responseId) {
 
 function processMap() {
   return artifacts.find((item) => item.artifact_type === "process_stage_map")?.payload?.stages || [
-    { title: "First contact", items: [] },
-    { title: "Understand the enquiry", items: [] },
-    { title: "Check urgency", items: [] },
-    { title: "Collect documents", items: [] },
-    { title: "Human review", items: [] },
+    { title: "Stage 1", items: [] },
+    { title: "Stage 2", items: [] },
+    { title: "Stage 3", items: [] },
+    { title: "Stage 4", items: [] },
+    { title: "Stage 5", items: [] },
   ];
 }
 

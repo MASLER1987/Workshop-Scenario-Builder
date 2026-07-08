@@ -181,9 +181,9 @@ textarea.short{min-height:130px}
 .edit-slide-panel h2{font-size:28px;margin:0;line-height:1.05;overflow-wrap:anywhere}
 .edit-slide-panel .eyebrow{color:var(--brand-mint)}
 .edit-slide-panel label{display:block;margin:14px 0;color:#e7f4ef;font-weight:900}
-.edit-slide-panel input,.edit-slide-panel textarea{margin-top:7px;background:#101b35;color:white;border-color:#3a4968;border-radius:8px;padding:12px;min-height:0}
+.edit-slide-panel input,.edit-slide-panel textarea,.edit-slide-panel select{margin-top:7px;background:#101b35;color:white;border-color:#3a4968;border-radius:8px;padding:12px;min-height:0}
 .edit-slide-panel textarea{resize:vertical}
-.edit-slide-panel input:focus,.edit-slide-panel textarea:focus{outline:3px solid #00a6c555;border-color:var(--brand-teal)}
+.edit-slide-panel input:focus,.edit-slide-panel textarea:focus,.edit-slide-panel select:focus{outline:3px solid #00a6c555;border-color:var(--brand-teal)}
 .icon-close{border:0;background:#263554;color:white;border-radius:999px;width:40px;height:40px;font-weight:900;cursor:pointer}
 .edit-slide-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;flex-wrap:wrap}
 .slide-list-panel{position:fixed;top:24px;left:24px;bottom:24px;width:min(620px,calc(100vw - 48px));z-index:19;background:var(--brand-navy);color:white;border:0;border-radius:8px;box-shadow:0 24px 70px #19254355;padding:22px;overflow:auto}
