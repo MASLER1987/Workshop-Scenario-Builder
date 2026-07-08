@@ -574,11 +574,18 @@ function processMap() {
   ];
 }
 
+function processItemResponseIds(stages) {
+  return new Set(stages.flatMap((stage) => (stage.items || []).map((item) => item.response_id).filter(Boolean)));
+}
+
 function renderProcessSlide(slide) {
   const stages = processMap();
-  const ideas = responses.map((r) => `<article class="idea-card" draggable="true" data-response="${r.id}"><strong>${r.votes || 0} votes</strong><p>${esc(r.payload?.text || "")}</p>${stages.map((stage, index) => `<button class="btn secondary" data-stage="${index}" data-response="${r.id}">${esc(stage.title)}</button>`).join("")}</article>`).join("");
+  const usedResponseIds = processItemResponseIds(stages);
+  const availableProcessResponses = responses.filter((r) => !usedResponseIds.has(r.id));
+  const ideas = availableProcessResponses.map((r) => `<article class="idea-card" draggable="true" data-response="${r.id}"><strong>${r.votes || 0} votes</strong><p>${esc(r.payload?.text || "")}</p>${stages.map((stage, index) => `<button class="btn secondary" data-stage="${index}" data-response="${r.id}">${esc(stage.title)}</button>`).join("")}</article>`).join("");
+  const emptyIdeas = responses.length ? "All suggestions have been placed." : "Waiting for process-stage ideas...";
   const board = stages.map((stage, index) => `<section class="stage drop-zone" data-stage-drop="${index}"><h3>${esc(stage.title)}</h3>${(stage.items || []).map((item) => `<p>${esc(item.text || item)}</p>`).join("")}</section>`).join("");
-  slideShell(slide, `<div class="curation-layout"><section><h2>Stage suggestions</h2><div class="idea-pool">${ideas || '<p class="muted">Waiting for process-stage ideas...</p>'}</div></section><section><h2>Process stage board</h2><div class="process-stage-board">${board}</div></section></div>`);
+  slideShell(slide, `<div class="curation-layout"><section><h2>Stage suggestions</h2><div class="idea-pool">${ideas || `<p class="muted">${emptyIdeas}</p>`}</div></section><section><h2>Process stage board</h2><div class="process-stage-board">${board}</div></section></div>`);
   document.querySelectorAll("[data-stage]").forEach((button) => (button.onclick = () => {
     addProcessItemToStage(slide.id, Number(button.dataset.stage), button.dataset.response);
   }));
@@ -596,7 +603,10 @@ function addProcessItemToStage(slideId, stageIndex, responseId) {
   const stages = processMap();
   const item = responses.find((r) => r.id === responseId);
   if (!item) return;
-  const next = stages.map((stage, index) => index === stageIndex ? { ...stage, items: [...(stage.items || []), { text: item.payload?.text || "" }] } : stage);
+  const next = stages.map((stage, index) => {
+    const items = (stage.items || []).filter((item) => item.response_id !== responseId);
+    return index === stageIndex ? { ...stage, items: [...items, { response_id: item.id, text: item.payload?.text || "" }] } : { ...stage, items };
+  });
   saveArtifact(slideId, "process_stage_map", { stages: next });
 }
 

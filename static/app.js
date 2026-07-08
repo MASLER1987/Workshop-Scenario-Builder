@@ -57,6 +57,36 @@ function clearQuestionDraft() {
   if (key) delete localStorage[key];
 }
 
+function responseDraftKey(type) {
+  const slideId = state.presentation?.active_slide_id || "current";
+  return state.sid ? "response-draft:" + state.sid + ":" + slideId + ":" + type : "";
+}
+
+function responseDraft(type) {
+  const key = responseDraftKey(type);
+  return key ? localStorage[key] || "" : "";
+}
+
+function saveResponseDraft(type) {
+  const key = responseDraftKey(type);
+  const input = $("#response");
+  if (key && input) localStorage[key] = input.value;
+}
+
+function clearResponseDraft(type) {
+  const key = responseDraftKey(type);
+  if (key) delete localStorage[key];
+}
+
+function preserveLiveInputs() {
+  saveQuestionDraft();
+  const response = $("#response");
+  if (response) {
+    const mode = state.presentation?.participant_mode;
+    if (mode === "requirements" || mode === "process") saveResponseDraft(mode);
+  }
+}
+
 function render() {
   if (!state.sid) {
     app.innerHTML = `<section class="phone-screen profile-intro">${brandMark()}<p class="eyebrow">Legal technology workshop</p><h1>Welcome</h1><p class="muted">Create your profile, then keep this page open during the presentation.</p><ol class="outcomes"><li><strong>Learn about legal technology careers</strong></li><li><strong>Learn how we build</strong></li><li><strong>Get hands on with AI</strong></li></ol><label for="name">Your name</label><input id="name" maxlength="40" placeholder="Your name"><div class="phone-action"><button class="btn primary" id="start">Start</button></div></section>`;
@@ -135,6 +165,7 @@ async function loadPresentationState() {
 async function refreshPresentation() {
   if (!state.sid || state.streaming) return;
   try {
+    preserveLiveInputs();
     const before = state.presentation?.active_slide_id;
     await loadPresentationState();
     const slideChanged = state.presentation?.active_slide_id !== before;
@@ -298,13 +329,15 @@ async function submitQuestion() {
 }
 
 function renderRequirements(slide) {
-  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Requirements")}${activeSlideBanner(slide, "Interactive now")}<div class="companion input-companion"><h1>What should the bot collect, avoid, or explain?</h1><textarea id="response" maxlength="160" class="short phone-textarea compact-textarea" placeholder="${esc(state.presentation?.interaction?.placeholder || "Your idea...")}"></textarea>${noticeHtml()}<div class="phone-action"><button class="btn primary" id="send-response">Send idea</button></div></div></section>`;
+  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Requirements")}${activeSlideBanner(slide, "Interactive now")}<div class="companion input-companion"><h1>What should the bot collect, avoid, or explain?</h1><textarea id="response" maxlength="160" class="short phone-textarea compact-textarea" placeholder="${esc(state.presentation?.interaction?.placeholder || "Your idea...")}">${esc(responseDraft("requirements"))}</textarea>${noticeHtml()}<div class="phone-action"><button class="btn primary" id="send-response">Send idea</button></div></div></section>`;
+  $("#response").oninput = () => saveResponseDraft("requirements");
   $("#send-response").onclick = () => submitResponse("requirements");
 }
 
 function renderProcess(slide) {
   const suggestions = (state.responses || []).map((item) => `<li><button class="vote" data-vote="${item.id}">+${item.votes || 0}</button><span>${esc(item.payload?.text || "")}</span></li>`).join("");
-  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Process map")}${activeSlideBanner(slide, "Interactive now")}<div class="companion input-companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "Matter intake stages")}</h1><p>Suggest a stage, or upvote one that looks useful.</p><textarea id="response" maxlength="100" class="short phone-textarea compact-textarea" placeholder="${esc(state.presentation?.interaction?.placeholder || "Suggest a stage...")}"></textarea>${noticeHtml()}<div class="phone-action"><button class="btn primary" id="send-response">Send stage</button></div><ul class="phone-list">${suggestions}</ul></div></section>`;
+  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Process map")}${activeSlideBanner(slide, "Interactive now")}<div class="companion input-companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "Matter intake stages")}</h1><p>Suggest a stage, or upvote one that looks useful.</p><textarea id="response" maxlength="100" class="short phone-textarea compact-textarea" placeholder="${esc(state.presentation?.interaction?.placeholder || "Suggest a stage...")}">${esc(responseDraft("process"))}</textarea>${noticeHtml()}<div class="phone-action"><button class="btn primary" id="send-response">Send stage</button></div><ul class="phone-list">${suggestions}</ul></div></section>`;
+  $("#response").oninput = () => saveResponseDraft("process");
   $("#send-response").onclick = () => submitResponse("process");
   document.querySelectorAll("[data-vote]").forEach((button) => (button.onclick = () => voteResponse(button.dataset.vote)));
 }
@@ -322,6 +355,7 @@ async function submitResponse(type) {
   });
   state.notice = type === "process" ? "Stage sent." : "Idea sent.";
   state.noticeKind = "success";
+  clearResponseDraft(type);
   await loadPresentationState();
   render();
 }

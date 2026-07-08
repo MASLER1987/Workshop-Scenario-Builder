@@ -12,14 +12,14 @@ class StaticAssetTests(unittest.TestCase):
         self.assertIn('viewport-fit=cover', html)
         self.assertIn('/static/style.css?v=presentation-25', html)
         self.assertIn('/static/presentation.js?v=presentation-18', html)
-        self.assertIn('/static/app.js?v=presentation-26', html)
+        self.assertIn('/static/app.js?v=presentation-27', html)
 
     def test_podium_cache_busts_assets(self):
         html = (ROOT / "static" / "podium.html").read_text()
 
         self.assertIn('/static/style.css?v=presentation-22', html)
         self.assertIn('/static/presentation.js?v=presentation-20', html)
-        self.assertIn('/static/podium.js?v=presentation-23', html)
+        self.assertIn('/static/podium.js?v=presentation-24', html)
 
     def test_participant_stream_loop_yields_to_browser_paint(self):
         script = (ROOT / "static" / "app.js").read_text()
@@ -56,11 +56,25 @@ class StaticAssetTests(unittest.TestCase):
 
         self.assertIn("function questionDraftKey()", script)
         self.assertIn('"question-draft:" + state.sid', script)
+        self.assertIn("function preserveLiveInputs()", script)
+        self.assertIn("preserveLiveInputs();", script)
         self.assertIn("function saveQuestionDraft()", script)
         self.assertIn("function clearQuestionDraft()", script)
         self.assertIn("${esc(questionDraft())}", script)
         self.assertIn('$("#question").oninput = saveQuestionDraft', script)
         self.assertIn("clearQuestionDraft();", script)
+
+    def test_participant_interactive_input_survives_polling(self):
+        script = (ROOT / "static" / "app.js").read_text()
+
+        self.assertIn("function responseDraftKey(type)", script)
+        self.assertIn('"response-draft:" + state.sid', script)
+        self.assertIn("function saveResponseDraft(type)", script)
+        self.assertIn("function clearResponseDraft(type)", script)
+        self.assertIn("${esc(responseDraft(\"requirements\"))}", script)
+        self.assertIn("${esc(responseDraft(\"process\"))}", script)
+        self.assertIn('$("#response").oninput = () => saveResponseDraft("requirements")', script)
+        self.assertIn('$("#response").oninput = () => saveResponseDraft("process")', script)
 
     def test_profile_screen_introduces_workshop_outcomes(self):
         script = (ROOT / "static" / "app.js").read_text()
