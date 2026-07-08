@@ -9,7 +9,8 @@ class StaticAssetTests(unittest.TestCase):
     def test_index_cache_busts_participant_assets(self):
         html = (ROOT / "static" / "index.html").read_text()
 
-        self.assertIn('/static/style.css?v=presentation-18', html)
+        self.assertIn('viewport-fit=cover', html)
+        self.assertIn('/static/style.css?v=presentation-21', html)
         self.assertIn('/static/presentation.js?v=presentation-18', html)
         self.assertIn('/static/app.js?v=presentation-18', html)
 
@@ -65,6 +66,15 @@ class StaticAssetTests(unittest.TestCase):
         self.assertIn("--brand-mint:#89c8a2", style)
         self.assertIn(".brand-mark", style)
         self.assertIn(".join-box{position:absolute;top:0;right:0", style)
+
+    def test_participant_mobile_layout_uses_safe_native_viewport(self):
+        style = (ROOT / "static" / "style.css").read_text()
+
+        self.assertIn("min-height:100dvh", style)
+        self.assertIn("env(safe-area-inset-bottom)", style)
+        self.assertIn(".bar .btn{flex:1", style)
+        self.assertIn("@media(max-width:430px)", style)
+        self.assertIn("touch-action:manipulation", style)
 
 
 if __name__ == "__main__":

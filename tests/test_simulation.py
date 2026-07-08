@@ -20,6 +20,11 @@ class SimulationPromptTests(unittest.TestCase):
         self.assertIn("If the bot sends a long wall of text", system)
         self.assertIn("generic or robotic replies two turns in a row", system)
         self.assertIn("never abusive, threatening, or graphic", system)
+        self.assertIn("stress-test", system)
+        self.assertIn("answer it honestly", system)
+        self.assertIn('"can you advise me?"', system)
+        self.assertIn("realistic tangent", system)
+        self.assertIn("Do not end too easily", system)
 
     def test_strip_end_suppresses_exact_end_and_truncates_trailing_end(self):
         self.assertEqual(simulation.strip_client_end("[END]"), ("", True))
