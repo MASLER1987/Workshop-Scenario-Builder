@@ -66,6 +66,7 @@ class PresentationCompanionTests(unittest.TestCase):
 
     def test_podium_app_renders_presentation_controls_and_artifacts(self):
         source = (ROOT / "static" / "podium.js").read_text()
+        style = (ROOT / "static" / "style.css").read_text()
 
         self.assertIn("presentationState", source)
         self.assertIn("renderPresentation", source)
@@ -79,6 +80,13 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn("renderLiveSlide", source)
         self.assertIn("archiveQuestion", source)
         self.assertIn("captured-requirements", source)
+        self.assertIn("requirements-idea-card", source)
+        self.assertIn("requirements-idea-pool", source)
+        self.assertIn("capturedRequirementResponseIds", source)
+        self.assertIn("availableResponses", source)
+        self.assertIn("response_id: item.id", source)
+        self.assertIn(".requirements-idea-card", style)
+        self.assertIn("-webkit-line-clamp:2", style)
         self.assertIn("process-stage-board", source)
         self.assertIn("slideOverrides", source)
         self.assertIn("effectiveSlide", source)

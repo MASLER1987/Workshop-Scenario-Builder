@@ -487,11 +487,17 @@ function capturedRequirements() {
   return artifacts.find((item) => item.artifact_type === "captured_requirements")?.payload?.items || [];
 }
 
+function capturedRequirementResponseIds(captured) {
+  return new Set(captured.map((item) => item.response_id).filter(Boolean));
+}
+
 function renderRequirementsSlide(slide) {
   const captured = capturedRequirements();
-  const incoming = responses.map((r) => `<article class="idea-card" draggable="true" data-response="${r.id}"><p>${esc(r.payload?.text || "")}</p><button class="btn secondary" data-capture="${r.id}">Capture</button></article>`).join("");
+  const capturedIds = capturedRequirementResponseIds(captured);
+  const availableResponses = responses.filter((r) => !capturedIds.has(r.id));
+  const incoming = availableResponses.map((r) => `<article class="idea-card requirements-idea-card" draggable="true" data-response="${r.id}"><p>${esc(r.payload?.text || "")}</p><button class="btn secondary" data-capture="${r.id}">Capture</button></article>`).join("");
   const capturedHtml = captured.map((item, index) => `<li><span>${esc(item.text || item)}</span><button class="btn secondary" data-remove-req="${index}">Remove</button></li>`).join("");
-  slideShell(slide, `<div class="curation-layout"><section><h2>Incoming ideas</h2><div class="idea-pool">${incoming || '<p class="muted">Waiting for student ideas...</p>'}</div></section><section class="captured-requirements drop-zone" data-requirements-drop="true"><h2>Captured requirements</h2><ol id="captured-list">${capturedHtml}</ol><p class="muted">Drag useful ideas here. These appear in the phone brief for the second bot round.</p></section></div>`);
+  slideShell(slide, `<div class="curation-layout"><section><h2>Incoming ideas</h2><div class="idea-pool requirements-idea-pool">${incoming || '<p class="muted">Waiting for student ideas...</p>'}</div></section><section class="captured-requirements drop-zone" data-requirements-drop="true"><h2>Captured requirements</h2><ol id="captured-list">${capturedHtml}</ol><p class="muted">Drag useful ideas here. These appear in the phone brief for the second bot round.</p></section></div>`);
   document.querySelectorAll("[data-capture]").forEach((button) => (button.onclick = () => captureRequirementResponse(slide.id, button.dataset.capture)));
   document.querySelectorAll("[data-remove-req]").forEach((button) => (button.onclick = () => {
     const next = captured.filter((_, index) => index !== Number(button.dataset.removeReq));
@@ -510,9 +516,10 @@ function renderRequirementsSlide(slide) {
 
 function captureRequirementResponse(slideId, responseId) {
   const captured = capturedRequirements();
+  if (capturedRequirementResponseIds(captured).has(responseId)) return;
   const item = responses.find((r) => r.id === responseId);
   if (!item) return;
-  const next = [...captured, { text: item.payload?.text || "" }];
+  const next = [...captured, { response_id: item.id, text: item.payload?.text || "" }];
   saveArtifact(slideId, "captured_requirements", { items: next });
 }
 
@@ -636,7 +643,7 @@ function scorePanel(score) {
   if (!score) return '<p class="muted">No score yet.</p>';
   const results = (score.results || []).map((item) => `<li class="${item.captured ? "yes" : "no"}"><span>${item.captured ? "yes" : "no"}</span><div><strong>${esc(item.label || item.id)}</strong>${item.evidence ? `<small>${esc(item.evidence)}</small>` : ""}</div></li>`).join("");
   const skills = ["tone", "questions", "clarity", "honesty"].map((key) => skillRow(labelFor(key), score.rubric?.[key] || 0)).join("");
-  return `<section class="score-panel podium-score ${scoreClass(score.captured)}"><h3>Info captured: ${score.captured} / ${score.total}</h3><ul class="objectives">${results}</ul><h3>Bot skills</h3><div class="skills">${skills}</div><div class="tip"><strong>Tip</strong><p>${esc(score.tip || "")}</p></div></section>`;
+  return `<section class="score-panel podium-score ${scoreClass(score.captured)}"><h3>Info captured: ${score.captured} / ${score.total}</h3><ul class="objectives">${results}</ul><h3>Instruction strength</h3><div class="skills">${skills}</div><div class="tip"><strong>Tip</strong><p>${esc(score.tip || "")}</p></div></section>`;
 }
 
 function skillRow(label, value) {

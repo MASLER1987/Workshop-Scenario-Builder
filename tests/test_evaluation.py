@@ -71,6 +71,8 @@ class EvaluationTests(unittest.TestCase):
         self.assertIn("PART 1", prompt)
         self.assertIn("PART 2", prompt)
         self.assertIn("PART 3", prompt)
+        self.assertIn("student's instructions", prompt)
+        self.assertIn("Hard caps", prompt)
         self.assertIn('"rubric"', prompt)
         self.assertIn('"tip"', prompt)
 
@@ -86,13 +88,43 @@ class EvaluationTests(unittest.TestCase):
         }
         objectives = [{"id": "people"}, {"id": "will"}, {"id": "urgency"}]
 
-        score = evaluation.normalize_score(raw, objectives)
+        score = evaluation.normalize_score(raw, objectives, instruction_text="Ask who is involved and what documents exist. Do not give legal advice.")
 
         self.assertEqual(score["captured"], 1)
         self.assertEqual(score["total"], 3)
         self.assertEqual(score["overall"], 14)
         self.assertEqual(score["rubric"], {"tone": 4, "questions": 2, "clarity": 5, "honesty": 3})
         self.assertEqual(score["results"][2], {"id": "urgency", "label": "urgency", "captured": False, "evidence": ""})
+
+    def test_weak_instruction_caps_objectives_and_rubric(self):
+        raw = {
+            "results": [
+                {"id": "facts", "captured": True, "evidence": "asked what happened"},
+                {"id": "people", "captured": True, "evidence": "asked who involved"},
+                {"id": "documents", "captured": True, "evidence": "asked messages"},
+            ],
+            "rubric": {"tone": 5, "questions": 5, "clarity": 5, "honesty": 5},
+            "tip": "Tell your bot what information to collect.",
+        }
+        objectives = [{"id": "facts"}, {"id": "people"}, {"id": "documents"}]
+
+        score = evaluation.normalize_score(raw, objectives, instruction_text="Test")
+
+        self.assertEqual(score["captured"], 1)
+        self.assertEqual(score["rubric"], {"tone": 2, "questions": 2, "clarity": 2, "honesty": 2})
+        self.assertEqual(score["results"][1]["captured"], False)
+        self.assertEqual(score["results"][1]["evidence"], "not supported by the instructions")
+
+    def test_missing_legal_guardrail_caps_honesty(self):
+        raw = {
+            "results": [{"id": "facts", "captured": True, "evidence": "asked what happened"}],
+            "rubric": {"tone": 4, "questions": 4, "clarity": 4, "honesty": 5},
+            "tip": "Tell your bot not to give legal advice.",
+        }
+
+        score = evaluation.normalize_score(raw, [{"id": "facts"}], instruction_text="Ask what happened and who is involved.")
+
+        self.assertEqual(score["rubric"]["honesty"], 2)
 
     def test_evaluate_transcript_retries_once_on_parse_failure(self):
         calls = []
@@ -111,6 +143,7 @@ class EvaluationTests(unittest.TestCase):
             return await evaluation.evaluate_transcript(
                 transcript=[{"role": "client", "text": "Help"}, {"role": "bot", "text": "Why?"}],
                 scenario_id="22222222-2222-2222-2222-222222222222",
+                instruction_text="Ask one clear question at a time and do not give legal advice.",
                 call_text=fake_call,
             )
 
@@ -147,6 +180,7 @@ class EvaluationTests(unittest.TestCase):
             return await evaluation.evaluate_transcript(
                 transcript=[{"role": "client", "text": "Help"}, {"role": "bot", "text": "What date?"}],
                 scenario=scenario,
+                instruction_text="Ask about the contract date and arrange a human follow-up. Do not give legal advice.",
                 call_text=fake_call,
             )
 
@@ -154,6 +188,8 @@ class EvaluationTests(unittest.TestCase):
 
         self.assertEqual(score["captured"], 1)
         self.assertIn("SCORECARD", calls[0])
+        self.assertIn("STUDENT INSTRUCTIONS", calls[0])
+        self.assertIn("Ask about the contract date", calls[0])
         self.assertIn("Bot asks about the contract date.", calls[0])
         self.assertIn("Do not tell the client", calls[0])
         self.assertNotIn("Public brief target", calls[0])
@@ -169,6 +205,7 @@ class EvaluationTests(unittest.TestCase):
             return await evaluation.evaluate_transcript(
                 transcript=[{"role": "client", "text": "Help"}, {"role": "bot", "text": "Who is involved?"}],
                 scenario_id="11111111-1111-1111-1111-111111111111",
+                instruction_text="Ask who is involved, one question at a time, and explain a solicitor can follow up.",
                 call_text=fake_call,
             )
 

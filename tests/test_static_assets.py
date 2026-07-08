@@ -12,14 +12,14 @@ class StaticAssetTests(unittest.TestCase):
         self.assertIn('viewport-fit=cover', html)
         self.assertIn('/static/style.css?v=presentation-23', html)
         self.assertIn('/static/presentation.js?v=presentation-18', html)
-        self.assertIn('/static/app.js?v=presentation-23', html)
+        self.assertIn('/static/app.js?v=presentation-24', html)
 
     def test_podium_cache_busts_assets(self):
         html = (ROOT / "static" / "podium.html").read_text()
 
         self.assertIn('/static/style.css?v=presentation-20', html)
         self.assertIn('/static/presentation.js?v=presentation-20', html)
-        self.assertIn('/static/podium.js?v=presentation-20', html)
+        self.assertIn('/static/podium.js?v=presentation-21', html)
 
     def test_participant_stream_loop_yields_to_browser_paint(self):
         script = (ROOT / "static" / "app.js").read_text()
@@ -32,7 +32,7 @@ class StaticAssetTests(unittest.TestCase):
         script = (ROOT / "static" / "app.js").read_text()
 
         self.assertIn("Info captured:", script)
-        self.assertIn("Bot skills", script)
+        self.assertIn("Instruction strength", script)
         self.assertIn("Tip", script)
         self.assertIn("scorePanel(state.run.score)", script)
 

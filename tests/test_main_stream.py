@@ -32,7 +32,10 @@ class MainStreamingTests(unittest.TestCase):
             yield {"type": "message_end"}
             yield {"type": "_result", "transcript": transcript, "ended_reason": "max_turns"}
 
-        async def fake_evaluate(*, transcript, scenario):
+        evaluate_instructions = []
+
+        async def fake_evaluate(*, transcript, instruction_text, scenario):
+            evaluate_instructions.append(instruction_text)
             return {
                 "captured": 1,
                 "total": 5,
@@ -83,6 +86,7 @@ class MainStreamingTests(unittest.TestCase):
         self.assertEqual(events[-2]["overall"], 16)
         self.assertEqual(events[-1]["ended_reason"], "max_turns")
         self.assertEqual(persisted[0]["score"]["tip"], "Tell your bot to explain the next step clearly.")
+        self.assertEqual(evaluate_instructions, ["Ask what happened"])
 
     def test_stream_waits_for_global_llm_slot_and_emits_status(self):
         active_runs = 0
@@ -106,7 +110,7 @@ class MainStreamingTests(unittest.TestCase):
             finally:
                 active_runs -= 1
 
-        async def fake_evaluate(*, transcript, scenario):
+        async def fake_evaluate(*, transcript, instruction_text, scenario):
             return {
                 "captured": 0,
                 "total": 5,
