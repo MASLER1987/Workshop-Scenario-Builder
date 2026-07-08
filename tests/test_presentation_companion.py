@@ -98,6 +98,8 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn("slide-list-panel", source)
         self.assertIn("quick-nav-arrow", source)
         self.assertIn("live-slide-pill", source)
+        self.assertNotIn('class="badge edited-badge">Edited</span>', source)
+        self.assertNotIn('<p class="eyebrow">${esc(slide.section)}</p>', source)
 
     def test_podium_join_box_uses_app_generated_qr_code(self):
         main_source = (ROOT / "app" / "main.py").read_text()
