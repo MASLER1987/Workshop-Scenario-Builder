@@ -12,7 +12,7 @@ class StaticAssetTests(unittest.TestCase):
         self.assertIn('viewport-fit=cover', html)
         self.assertIn('/static/style.css?v=presentation-24', html)
         self.assertIn('/static/presentation.js?v=presentation-18', html)
-        self.assertIn('/static/app.js?v=presentation-25', html)
+        self.assertIn('/static/app.js?v=presentation-26', html)
 
     def test_podium_cache_busts_assets(self):
         html = (ROOT / "static" / "podium.html").read_text()
@@ -50,6 +50,17 @@ class StaticAssetTests(unittest.TestCase):
         self.assertIn("function syncModeToPresentation()", script)
         self.assertIn("if (slideChanged) syncModeToPresentation()", script)
         self.assertNotIn('participantMode === "results" || state.mode === "transcript"', script)
+
+    def test_participant_qna_draft_survives_slide_rerender(self):
+        script = (ROOT / "static" / "app.js").read_text()
+
+        self.assertIn("function questionDraftKey()", script)
+        self.assertIn('"question-draft:" + state.sid', script)
+        self.assertIn("function saveQuestionDraft()", script)
+        self.assertIn("function clearQuestionDraft()", script)
+        self.assertIn("${esc(questionDraft())}", script)
+        self.assertIn('$("#question").oninput = saveQuestionDraft', script)
+        self.assertIn("clearQuestionDraft();", script)
 
     def test_profile_screen_introduces_workshop_outcomes(self):
         script = (ROOT / "static" / "app.js").read_text()

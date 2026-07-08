@@ -37,6 +37,26 @@ function saveDraft() {
   if (input && state.sid) localStorage["draft:" + state.sid] = input.value;
 }
 
+function questionDraftKey() {
+  return state.sid ? "question-draft:" + state.sid : "";
+}
+
+function questionDraft() {
+  const key = questionDraftKey();
+  return key ? localStorage[key] || "" : "";
+}
+
+function saveQuestionDraft() {
+  const key = questionDraftKey();
+  const input = $("#question");
+  if (key && input) localStorage[key] = input.value;
+}
+
+function clearQuestionDraft() {
+  const key = questionDraftKey();
+  if (key) delete localStorage[key];
+}
+
 function render() {
   if (!state.sid) {
     app.innerHTML = `<section class="phone-screen profile-intro">${brandMark()}<p class="eyebrow">Legal technology workshop</p><h1>Welcome</h1><p class="muted">Create your profile, then keep this page open during the presentation.</p><ol class="outcomes"><li><strong>Learn about legal technology careers</strong></li><li><strong>Learn how we build</strong></li><li><strong>Get hands on with AI</strong></li></ol><label for="name">Your name</label><input id="name" maxlength="40" placeholder="Your name"><div class="phone-action"><button class="btn primary" id="start">Start</button></div></section>`;
@@ -262,7 +282,8 @@ function renderPassive(slide) {
 }
 
 function renderQna(slide) {
-  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Q&A")}${activeSlideBanner(slide)}<div class="companion input-companion"><p class="eyebrow">On screen</p><h1>${esc(slide?.title || "Questions")}</h1><p class="muted">Ask a question for the presenters.</p><textarea id="question" maxlength="500" class="short phone-textarea" placeholder="Type your question..."></textarea>${noticeHtml()}<div class="phone-action"><button class="btn primary" id="send-question">Send question</button></div></div></section>`;
+  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Q&A")}${activeSlideBanner(slide)}<div class="companion input-companion"><p class="eyebrow">On screen</p><h1>${esc(slide?.title || "Questions")}</h1><p class="muted">Ask a question for the presenters.</p><textarea id="question" maxlength="500" class="short phone-textarea" placeholder="Type your question...">${esc(questionDraft())}</textarea>${noticeHtml()}<div class="phone-action"><button class="btn primary" id="send-question">Send question</button></div></div></section>`;
+  $("#question").oninput = saveQuestionDraft;
   $("#send-question").onclick = submitQuestion;
 }
 
@@ -270,6 +291,7 @@ async function submitQuestion() {
   const text = $("#question").value.trim();
   if (!text) return;
   await api(`/api/sessions/${state.sid}/questions`, { method: "POST", body: JSON.stringify({ text }) });
+  clearQuestionDraft();
   state.notice = "Question sent.";
   state.noticeKind = "success";
   renderQna(activeSlide());
