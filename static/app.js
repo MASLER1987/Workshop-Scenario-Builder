@@ -44,7 +44,7 @@ function render() {
     return;
   }
   const participantMode = state.presentation?.participant_mode || "qna";
-  if ((participantMode === "results" || state.mode === "transcript") && state.run) {
+  if (shouldShowTranscript(participantMode)) {
     renderTranscript();
     return;
   }
@@ -60,6 +60,16 @@ function render() {
   };
   $("#brief").onclick = drawer;
   $("#run").onclick = run;
+}
+
+function shouldShowTranscript(participantMode) {
+  if (!state.run) return false;
+  return participantMode === "results" || (participantMode === "bot" && state.mode === "transcript");
+}
+
+function syncModeToPresentation() {
+  const participantMode = state.presentation?.participant_mode || "qna";
+  state.mode = participantMode === "results" && state.run ? "transcript" : "editor";
 }
 
 async function start() {
@@ -82,7 +92,7 @@ async function load() {
     state.version = r.latest_instruction?.version_number || 0;
     state.run = r.latest_run;
     await loadPresentationState();
-    state.mode = state.presentation?.participant_mode === "results" && state.run ? "transcript" : "editor";
+    syncModeToPresentation();
     state.streaming = false;
     state.notice = "";
     state.noticeKind = "";
@@ -107,7 +117,9 @@ async function refreshPresentation() {
   try {
     const before = state.presentation?.active_slide_id;
     await loadPresentationState();
-    if (state.presentation?.active_slide_id !== before || state.presentation?.participant_mode === "process") render();
+    const slideChanged = state.presentation?.active_slide_id !== before;
+    if (slideChanged) syncModeToPresentation();
+    if (slideChanged || state.presentation?.participant_mode === "process") render();
   } catch (e) {}
 }
 
