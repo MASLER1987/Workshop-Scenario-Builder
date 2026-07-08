@@ -243,11 +243,17 @@ async def session_state(sid: uuid.UUID):
 @app.post("/api/sessions/{sid}/questions")
 async def submit_question(sid: uuid.UUID, body: QuestionIn):
     await require_session(sid)
+    state = await presentation_state()
+    slide_id = state.get("active_slide_id")
+    active_slide = state.get("active_slide") or {}
+    slide_title = active_slide.get("title") or slide_id
     row = await db.fetchrow(
-        "INSERT INTO participant_questions (id, session_id, text) VALUES ($1,$2,$3) RETURNING *",
+        "INSERT INTO participant_questions (id, session_id, text, slide_id, slide_title) VALUES ($1,$2,$3,$4,$5) RETURNING *",
         uuid.uuid4(),
         sid,
         body.text.strip(),
+        slide_id,
+        slide_title,
     )
     return {"question": rowdict(row)}
 

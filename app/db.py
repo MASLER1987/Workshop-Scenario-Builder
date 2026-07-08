@@ -177,6 +177,8 @@ async def init_db() -> None:
           id UUID PRIMARY KEY,
           session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
           text TEXT NOT NULL,
+          slide_id TEXT,
+          slide_title TEXT,
           is_answered BOOLEAN DEFAULT false,
           created_at TIMESTAMPTZ DEFAULT now()
         );
@@ -225,6 +227,8 @@ async def init_db() -> None:
         await con.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS score JSONB")
         await con.execute("ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS objectives JSONB")
         await con.execute("ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS scorecard JSONB")
+        await con.execute("ALTER TABLE participant_questions ADD COLUMN IF NOT EXISTS slide_id TEXT")
+        await con.execute("ALTER TABLE participant_questions ADD COLUMN IF NOT EXISTS slide_title TEXT")
         count = await con.fetchval("SELECT count(*) FROM scenarios")
         if count == 0:
             for s in SCENARIOS:

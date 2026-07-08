@@ -496,10 +496,14 @@ function renderLiveSlide(slide) {
   }));
 }
 
+function questionSlideLabel(question) {
+  return question.slide_title || question.slide_id || "Unknown slide";
+}
+
 function renderQnaReviewSlide(slide) {
   const visibleQuestions = questions.filter((question) => !question.is_answered);
   const archivedCount = questions.length - visibleQuestions.length;
-  const list = visibleQuestions.map((question) => `<article class="question-card"><div><p>${esc(question.text)}</p><small>${esc(question.display_name || "Participant")}</small></div><button class="btn primary" data-archive-question="${question.id}">Tick</button></article>`).join("");
+  const list = visibleQuestions.map((question) => `<article class="question-card"><div><p>${esc(question.text)}</p><small>${esc(question.display_name || "Participant")}<span class="question-slide-pill">${esc(questionSlideLabel(question))}</span></small></div><button class="btn primary" data-archive-question="${question.id}">Tick</button></article>`).join("");
   slideShell(slide, `<section class="qna-review"><div class="qna-summary"><p>${esc(slide.body || "")}</p><strong>${visibleQuestions.length}</strong><span>open questions</span><em>${archivedCount} archived</em></div><div class="question-list">${list || '<p class="muted">No open questions yet.</p>'}</div></section>`);
   document.querySelectorAll("[data-archive-question]").forEach((button) => (button.onclick = () => archiveQuestion(button.dataset.archiveQuestion)));
 }
