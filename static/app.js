@@ -33,7 +33,7 @@ function saveDraft() {
 
 function render() {
   if (!state.sid) {
-    app.innerHTML = `<section class="profile-intro">${brandMark()}<p class="eyebrow">Legal technology workshop</p><h1>Welcome</h1><p class="muted">Create your profile, then keep this page open during the presentation.</p><ol class="outcomes"><li><strong>Learn about legal technology careers</strong></li><li><strong>Learn how we build</strong></li><li><strong>Get hands on with AI</strong></li></ol><label for="name">Your name</label><input id="name" maxlength="40" placeholder="Your name"><p><button class="btn primary" id="start">Start</button></p></section>`;
+    app.innerHTML = `<section class="phone-screen profile-intro">${brandMark()}<p class="eyebrow">Legal technology workshop</p><h1>Welcome</h1><p class="muted">Create your profile, then keep this page open during the presentation.</p><ol class="outcomes"><li><strong>Learn about legal technology careers</strong></li><li><strong>Learn how we build</strong></li><li><strong>Get hands on with AI</strong></li></ol><label for="name">Your name</label><input id="name" maxlength="40" placeholder="Your name"><div class="phone-action"><button class="btn primary" id="start">Start</button></div></section>`;
     $("#start").onclick = start;
     return;
   }
@@ -46,7 +46,7 @@ function render() {
     renderCompanion(participantMode);
     return;
   }
-  app.innerHTML = `<section class="bot-builder-view"><header class="bot-workspace-head"><div><strong>${esc(state.name)}</strong><h1>Write your bot instructions</h1></div><span class="badge">v${state.version || "new"}</span></header>${capturedRequirementsHtml()}<label class="instruction-editor" for="instruction"><span>Instructions</span><textarea id="instruction" class="instruction-input" maxlength="4000" placeholder="Write the instructions for your intake chatbot...">${esc(state.instruction)}</textarea></label></section><div class="bar"><button class="btn secondary" id="brief">Client brief</button><button class="btn primary" id="run" ${state.instruction.trim() ? "" : "disabled"}>Run test</button></div>`;
+  app.innerHTML = `<section class="phone-screen bot-builder-view"><header class="bot-workspace-head"><div><strong>${esc(state.name)}</strong><h1>Write your bot instructions</h1></div><span class="badge">v${state.version || "new"}</span></header>${capturedRequirementsHtml()}<label class="instruction-editor" for="instruction"><span>Instructions</span><textarea id="instruction" class="instruction-input" maxlength="4000" placeholder="Write the instructions for your intake chatbot...">${esc(state.instruction)}</textarea></label></section><div class="bar"><button class="btn secondary" id="brief">Client brief</button><button class="btn primary" id="run" ${state.instruction.trim() ? "" : "disabled"}>Run test</button></div>`;
   $("#instruction").oninput = (e) => {
     state.instruction = e.target.value;
     $("#run").disabled = !state.instruction.trim();
@@ -195,7 +195,7 @@ function renderTranscript() {
       : state.run.ended_reason === "error"
         ? "ended with an error"
         : "reached turn limit";
-  app.innerHTML = `<section class="test-view"><header class="bot-workspace-head test-head"><div><span class="eyebrow">Bot test</span><h1>v${state.run.version_number || state.version || "new"}</h1></div><span class="tag">${reason}</span></header>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}<div class="chat transcript-chat">${chat(state.run.transcript)}</div>${scorePanel(state.run.score)}</section><div class="bar"><button class="btn primary" id="edit" ${state.streaming ? "disabled" : ""}>Edit instruction</button><button class="btn secondary" id="again" ${state.streaming ? "disabled" : ""}>Run again</button></div>`;
+  app.innerHTML = `<section class="phone-screen test-view"><header class="bot-workspace-head test-head"><div><span class="eyebrow">Bot test</span><h1>v${state.run.version_number || state.version || "new"}</h1></div><span class="tag">${reason}</span></header>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}<div class="chat transcript-chat">${chat(state.run.transcript)}</div>${scorePanel(state.run.score)}</section><div class="bar"><button class="btn primary" id="edit" ${state.streaming ? "disabled" : ""}>Edit instruction</button><button class="btn secondary" id="again" ${state.streaming ? "disabled" : ""}>Run again</button></div>`;
   $("#edit").onclick = () => {
     if (state.streaming) return;
     state.mode = "editor";
@@ -237,12 +237,12 @@ function activeSlideBanner(slide, label = "Live slide") {
 }
 
 function renderPassive(slide) {
-  app.innerHTML = `${phoneHead("Connected")}${activeSlideBanner(slide)}<section class="companion"><p class="eyebrow">On screen</p><h1>${esc(slide?.title || "Workshop")}</h1><p>${esc(slide?.body || "Watch the screen. You can ask a question at any time.")}</p><button class="btn secondary" id="qna">Ask a question</button></section>`;
+  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Connected")}${activeSlideBanner(slide)}<div class="companion"><p class="eyebrow">On screen</p><h1>${esc(slide?.title || "Workshop")}</h1><p>${esc(slide?.body || "Watch the screen. You can ask a question at any time.")}</p></div><div class="phone-action"><button class="btn secondary" id="qna">Ask a question</button></div></section>`;
   $("#qna").onclick = () => renderQna(slide);
 }
 
 function renderQna(slide) {
-  app.innerHTML = `${phoneHead("Q&A")}${activeSlideBanner(slide)}<section class="companion"><p class="eyebrow">On screen</p><h1>${esc(slide?.title || "Questions")}</h1><p class="muted">Ask a question for the presenters.</p><textarea id="question" maxlength="500" class="short" placeholder="Type your question..."></textarea><p><button class="btn primary" id="send-question">Send question</button></p>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</section>`;
+  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Q&A")}${activeSlideBanner(slide)}<div class="companion input-companion"><p class="eyebrow">On screen</p><h1>${esc(slide?.title || "Questions")}</h1><p class="muted">Ask a question for the presenters.</p><textarea id="question" maxlength="500" class="short phone-textarea" placeholder="Type your question..."></textarea><div class="phone-action"><button class="btn primary" id="send-question">Send question</button></div>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</div></section>`;
   $("#send-question").onclick = submitQuestion;
 }
 
@@ -255,13 +255,13 @@ async function submitQuestion() {
 }
 
 function renderRequirements(slide) {
-  app.innerHTML = `${phoneHead("Requirements")}${activeSlideBanner(slide, "Interactive now")}<section class="companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "What matters for intake?")}</h1><p>Suggest something the bot should collect, avoid, or explain.</p><textarea id="response" maxlength="160" class="short" placeholder="${esc(state.presentation?.interaction?.placeholder || "Your idea...")}"></textarea><p><button class="btn primary" id="send-response">Send idea</button></p>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</section>`;
+  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Requirements")}${activeSlideBanner(slide, "Interactive now")}<div class="companion input-companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "What matters for intake?")}</h1><p>Suggest something the bot should collect, avoid, or explain.</p><textarea id="response" maxlength="160" class="short phone-textarea" placeholder="${esc(state.presentation?.interaction?.placeholder || "Your idea...")}"></textarea><div class="phone-action"><button class="btn primary" id="send-response">Send idea</button></div>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</div></section>`;
   $("#send-response").onclick = () => submitResponse("requirements");
 }
 
 function renderProcess(slide) {
   const suggestions = (state.responses || []).map((item) => `<li><button class="vote" data-vote="${item.id}">+${item.votes || 0}</button><span>${esc(item.payload?.text || "")}</span></li>`).join("");
-  app.innerHTML = `${phoneHead("Process map")}${activeSlideBanner(slide, "Interactive now")}<section class="companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "Matter intake stages")}</h1><p>Suggest a stage, or upvote one that looks useful.</p><textarea id="response" maxlength="100" class="short" placeholder="${esc(state.presentation?.interaction?.placeholder || "Suggest a stage...")}"></textarea><p><button class="btn primary" id="send-response">Send stage</button></p><ul class="phone-list">${suggestions}</ul>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</section>`;
+  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Process map")}${activeSlideBanner(slide, "Interactive now")}<div class="companion input-companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "Matter intake stages")}</h1><p>Suggest a stage, or upvote one that looks useful.</p><textarea id="response" maxlength="100" class="short phone-textarea" placeholder="${esc(state.presentation?.interaction?.placeholder || "Suggest a stage...")}"></textarea><div class="phone-action"><button class="btn primary" id="send-response">Send stage</button></div><ul class="phone-list">${suggestions}</ul>${state.notice ? `<p class="notice">${esc(state.notice)}</p>` : ""}</div></section>`;
   $("#send-response").onclick = () => submitResponse("process");
   document.querySelectorAll("[data-vote]").forEach((button) => (button.onclick = () => voteResponse(button.dataset.vote)));
 }
