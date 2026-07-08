@@ -15,6 +15,8 @@ let deckPersisted = false;
 let slideOverrides = {};
 let selectedSlideIndex = 0;
 let draggingSlideId = null;
+let lastRenderedSlideId = null;
+let pendingSlideTransition = "none";
 
 const SLIDE_TEMPLATE_OPTIONS = [
   { value: "standard", label: "Standard slide", participantMode: "passive", podiumType: "slide" },
@@ -44,6 +46,7 @@ function ago(d) {
 }
 
 async function load() {
+  const previousSlideId = lastRenderedSlideId;
   sessions = await api("/api/podium/sessions");
   scenarios = await api("/api/podium/scenarios");
   summary = await api("/api/podium/summary");
@@ -51,6 +54,7 @@ async function load() {
   await loadSlideDeck();
   await loadSlideOverrides();
   selectedSlideIndex = Math.max(0, deckSlides.findIndex((slide) => slide.id === presentationState.active_slide_id));
+  setTransitionFromSlideIds(previousSlideId, presentationState.active_slide_id);
   if (viewMode === "grid") renderGrid();
   else renderPresentation();
 }
@@ -101,7 +105,9 @@ function currentSlide() {
 }
 
 async function activateSlide(index) {
+  const previousIndex = selectedSlideIndex;
   selectedSlideIndex = Math.max(0, Math.min(deckSlides.length - 1, index));
+  pendingSlideTransition = selectedSlideIndex < previousIndex ? "back" : selectedSlideIndex > previousIndex ? "forward" : "none";
   const slide = currentSlide();
   await api("/api/podium/presentation/activate", {
     method: "POST",
@@ -155,9 +161,30 @@ function renderByTemplate(slide) {
   (renderers[slide.template] || renderStandardSlide)(slide);
 }
 
+function setTransitionFromSlideIds(previousSlideId, nextSlideId) {
+  if (!previousSlideId || !nextSlideId || previousSlideId === nextSlideId) return;
+  const previousIndex = deckSlides.findIndex((slide) => slide.id === previousSlideId);
+  const nextIndex = deckSlides.findIndex((slide) => slide.id === nextSlideId);
+  if (previousIndex < 0 || nextIndex < 0) {
+    pendingSlideTransition = "forward";
+    return;
+  }
+  pendingSlideTransition = nextIndex < previousIndex ? "back" : "forward";
+}
+
+function slideTransitionClass(direction) {
+  if (direction === "forward") return " slide-enter slide-forward";
+  if (direction === "back") return " slide-enter slide-back";
+  return "";
+}
+
 function slideShell(slide, body) {
   const section = slide.section ? `<span class="slide-section">${esc(slide.section)}</span>` : "";
-  app.innerHTML = `<div class="podium-shell presentation-shell template-${esc(slide.template || "standard")}"><header class="presentation-top"><div class="slide-heading"><div class="brand-row">${brandMark()}${section}</div><h1>${esc(slide.title)}</h1></div><div class="join-box" aria-label="Join on your phone"><img class="qr-code" src="${esc(qrImageUrl())}" alt="QR code for participant app"><span class="join-caption">Scan to join</span></div></header>${body}<footer class="presentation-controls"><div class="presenter-nav"><button class="btn secondary" id="prev">Back</button><span class="slide-count">${selectedSlideIndex + 1}<i>/</i>${deckSlides.length}</span><button class="btn primary" id="next">Next</button></div><div class="presenter-tools"><button class="btn ghost" id="slide-list">Slide list</button><button class="btn ghost" id="edit-slide">Edit slide</button><button class="btn ghost" id="grid">Live grid</button><button class="btn ghost" id="reset">Reset</button></div></footer><div class="presenter-hint" aria-hidden="true">Controls</div></div>`;
+  const shouldAnimate = lastRenderedSlideId && lastRenderedSlideId !== slide.id && pendingSlideTransition !== "none";
+  const transitionClass = shouldAnimate ? slideTransitionClass(pendingSlideTransition) : "";
+  app.innerHTML = `<div class="podium-shell presentation-shell template-${esc(slide.template || "standard")}${transitionClass}"><header class="presentation-top"><div class="slide-heading"><div class="brand-row">${brandMark()}${section}</div><h1>${esc(slide.title)}</h1></div><div class="join-box" aria-label="Join on your phone"><img class="qr-code" src="${esc(qrImageUrl())}" alt="QR code for participant app"><span class="join-caption">Scan to join</span></div></header>${body}<footer class="presentation-controls"><div class="presenter-nav"><button class="btn secondary" id="prev">Back</button><span class="slide-count">${selectedSlideIndex + 1}<i>/</i>${deckSlides.length}</span><button class="btn primary" id="next">Next</button></div><div class="presenter-tools"><button class="btn ghost" id="slide-list">Slide list</button><button class="btn ghost" id="edit-slide">Edit slide</button><button class="btn ghost" id="grid">Live grid</button><button class="btn ghost" id="reset">Reset</button></div></footer><div class="presenter-hint" aria-hidden="true">Controls</div></div>`;
+  lastRenderedSlideId = slide.id;
+  pendingSlideTransition = "none";
   document.querySelector("#prev").onclick = () => activateSlide(selectedSlideIndex - 1);
   document.querySelector("#next").onclick = () => activateSlide(selectedSlideIndex + 1);
   document.querySelector("#slide-list").onclick = renderSlideList;

@@ -50,3 +50,17 @@ class PodiumProgressionTests(unittest.TestCase):
         self.assertIn("grid-template-columns:minmax(360px,.9fr) minmax(560px,1.1fr)", source)
         self.assertIn("@media(max-width:1100px)", source)
         self.assertIn("@media(min-width:1500px)", source)
+
+    def test_podium_slide_changes_have_directional_transitions(self):
+        script = (ROOT / "static" / "podium.js").read_text()
+        style = (ROOT / "static" / "style.css").read_text()
+
+        self.assertIn("lastRenderedSlideId", script)
+        self.assertIn("pendingSlideTransition", script)
+        self.assertIn("setTransitionFromSlideIds", script)
+        self.assertIn("slide-enter", script)
+        self.assertIn("slide-forward", script)
+        self.assertIn("slide-back", script)
+        self.assertIn("@keyframes podium-slide-forward", style)
+        self.assertIn("@keyframes podium-slide-back", style)
+        self.assertIn("@media(prefers-reduced-motion:reduce)", style)
