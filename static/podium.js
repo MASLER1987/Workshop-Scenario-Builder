@@ -174,8 +174,8 @@ function renderSlideList() {
   document.querySelector(".slide-list-panel")?.remove();
   const rows = deckSlides.map((slide, index) => {
     const isLive = index === selectedSlideIndex;
-    return `<article class="slide-row ${isLive ? "selected" : ""}" draggable="true" data-slide-id="${esc(slide.id)}"><span class="drag-handle" role="presentation">::</span><button class="quick-nav-arrow" draggable="false" data-go-slide="${index}" aria-label="Go to slide ${index + 1}">-></button><button class="slide-row-main" draggable="false" data-go-slide="${index}"><strong>${index + 1}. ${esc(slide.title || "Untitled slide")}${isLive ? '<span class="live-slide-pill">Live</span>' : ""}</strong><small>${esc(slide.section || "slide")} · ${esc(slide.template || "standard")} · phone: ${esc(slide.participantMode || "passive")}</small></button><button class="btn secondary" draggable="false" data-edit-row="${index}">Edit</button></article>`;
-  }).join("");
+    return `${slideDropZone(index)}<article class="slide-row ${isLive ? "selected" : ""}" draggable="true" data-slide-id="${esc(slide.id)}"><span class="drag-handle" role="presentation">::</span><button class="quick-nav-arrow" draggable="false" data-go-slide="${index}" aria-label="Go to slide ${index + 1}">-></button><button class="slide-row-main" draggable="false" data-go-slide="${index}"><strong>${index + 1}. ${esc(slide.title || "Untitled slide")}${isLive ? '<span class="live-slide-pill">Live</span>' : ""}</strong><small>${esc(slide.section || "slide")} · ${esc(slide.template || "standard")} · phone: ${esc(slide.participantMode || "passive")}</small></button><button class="btn secondary" draggable="false" data-edit-row="${index}">Edit</button></article>`;
+  }).join("") + slideDropZone(deckSlides.length);
   document.body.insertAdjacentHTML("beforeend", `<aside class="slide-list-panel"><header><div><span class="eyebrow">Deck</span><h2>Slide list</h2></div><button type="button" class="icon-close" id="close-slide-list" aria-label="Close">x</button></header><div class="slide-list-actions"><button class="btn primary" id="new-slide">New slide</button><span>${deckPersisted ? "Saved in Railway" : "Using bundled deck"}</span></div><div class="slide-rows">${rows}</div></aside>`);
   document.querySelector("#close-slide-list").onclick = closeSlideList;
   document.querySelector("#new-slide").onclick = createBlankSlide;
@@ -185,6 +185,10 @@ function renderSlideList() {
   }));
   document.querySelectorAll("[data-edit-row]").forEach((button) => (button.onclick = () => openSlideEditor(effectiveSlide(deckSlides[Number(button.dataset.editRow)]))));
   bindSlideRows();
+}
+
+function slideDropZone(index) {
+  return `<div class="slide-drop-zone" data-drop-index="${index}" aria-hidden="true"></div>`;
 }
 
 function closeSlideList() {
@@ -200,31 +204,34 @@ function bindSlideRows() {
       row.classList.add("dragging");
     };
     row.ondragend = clearSlideDragState;
-    row.ondragenter = (event) => {
-      if (!draggingSlideId || row.dataset.slideId === draggingSlideId) return;
+  });
+  document.querySelectorAll(".slide-drop-zone[data-drop-index]").forEach((zone) => {
+    zone.ondragenter = (event) => {
+      if (!draggingSlideId) return;
       event.preventDefault();
-      row.classList.add("drop-target");
+      zone.classList.add("drop-target");
     };
-    row.ondragleave = (event) => {
-      if (!row.contains(event.relatedTarget)) row.classList.remove("drop-target");
+    zone.ondragleave = (event) => {
+      if (!zone.contains(event.relatedTarget)) zone.classList.remove("drop-target");
     };
-    row.ondragover = (event) => {
-      if (!draggingSlideId || row.dataset.slideId === draggingSlideId) return;
+    zone.ondragover = (event) => {
+      if (!draggingSlideId) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = "move";
     };
-    row.ondrop = (event) => {
+    zone.ondrop = (event) => {
       event.preventDefault();
       const sourceId = event.dataTransfer.getData("text/plain") || draggingSlideId;
+      const dropIndex = Number(zone.dataset.dropIndex);
       clearSlideDragState();
-      reorderSlide(sourceId, row.dataset.slideId);
+      reorderSlideToIndex(sourceId, dropIndex);
     };
   });
 }
 
 function clearSlideDragState() {
   draggingSlideId = null;
-  document.querySelectorAll(".slide-row.dragging, .slide-row.drop-target").forEach((row) => {
+  document.querySelectorAll(".slide-row.dragging, .slide-row.drop-target, .slide-drop-zone.drop-target").forEach((row) => {
     row.classList.remove("dragging", "drop-target");
   });
 }
@@ -269,16 +276,18 @@ async function saveSlideOrder() {
   });
 }
 
-async function reorderSlide(sourceId, targetId) {
-  if (!sourceId || !targetId || sourceId === targetId) return;
+async function reorderSlideToIndex(sourceId, targetIndex) {
+  if (!sourceId || Number.isNaN(targetIndex)) return;
   const previousPositions = slideRowPositions();
   const activeId = currentSlide().id;
   const sourceIndex = deckSlides.findIndex((slide) => slide.id === sourceId);
-  const targetIndex = deckSlides.findIndex((slide) => slide.id === targetId);
-  if (sourceIndex < 0 || targetIndex < 0) return;
+  if (sourceIndex < 0) return;
+  let insertionIndex = Math.max(0, Math.min(deckSlides.length, targetIndex));
+  if (insertionIndex === sourceIndex || insertionIndex === sourceIndex + 1) return;
   const next = [...deckSlides];
   const [moved] = next.splice(sourceIndex, 1);
-  next.splice(targetIndex, 0, moved);
+  if (sourceIndex < insertionIndex) insertionIndex -= 1;
+  next.splice(insertionIndex, 0, moved);
   deckSlides = next;
   selectedSlideIndex = Math.max(0, deckSlides.findIndex((slide) => slide.id === activeId));
   await saveSlideOrder();
