@@ -37,17 +37,21 @@ def test_describe_database_url_hides_credentials():
     assert described == "postgresql://example.com:5433/workshop"
 
 
-def test_connection_variants_only_use_default_for_railway_internal_host():
+def test_connection_variants_try_ssl_modes_for_railway_internal_host():
     variants = db.connection_variants("postgresql://user:secret@postgres.railway.internal:5432/railway")
 
-    assert variants == [("default SSL negotiation", {})]
+    assert variants == [
+        ("SSL disabled", {"ssl": False}),
+        ("default SSL negotiation", {}),
+        ("SSL required", {"ssl": True}),
+    ]
 
 
 def test_connection_variants_try_ssl_modes_for_public_host():
     variants = db.connection_variants("postgresql://user:secret@hayabusa.proxy.rlwy.net:21530/railway")
 
     assert variants == [
-        ("default SSL negotiation", {}),
         ("SSL disabled", {"ssl": False}),
+        ("default SSL negotiation", {}),
         ("SSL required", {"ssl": True}),
     ]

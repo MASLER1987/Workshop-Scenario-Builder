@@ -49,8 +49,15 @@ def describe_database_url(url: str) -> str:
 
 def connection_variants(url: str) -> list[tuple[str, dict[str, Any]]]:
     parsed = urlparse(url)
+    host = parsed.hostname or ""
+    if "railway" in host or host.endswith(".rlwy.net"):
+        return [
+            ("SSL disabled", {"ssl": False}),
+            ("default SSL negotiation", {}),
+            ("SSL required", {"ssl": True}),
+        ]
     variants: list[tuple[str, dict[str, Any]]] = [("default SSL negotiation", {})]
-    if (parsed.hostname or "").endswith(".railway.internal"):
+    if host.endswith(".railway.internal"):
         return variants
     variants.extend(
         [
