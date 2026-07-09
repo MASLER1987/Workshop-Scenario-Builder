@@ -17,6 +17,8 @@ let selectedSlideIndex = 0;
 let draggingSlideId = null;
 let lastRenderedSlideId = null;
 let pendingSlideTransition = "none";
+let slideTimerInterval = null;
+let slideTimerStarts = loadSlideTimerStarts();
 let pendingSlideImage = null;
 let pendingSlideImageFile = null;
 let pendingSlideImagePreviewUrl = "";
@@ -147,6 +149,103 @@ function brandMark() {
   return '<img class="brand-mark" src="/static/vwv-logo.png?v=1" width="799" height="191" alt="VWV">';
 }
 
+function slideTimerStorageKey() {
+  return `podium-slide-timer-starts:${key || "local"}`;
+}
+
+function loadSlideTimerStarts() {
+  try {
+    return JSON.parse(sessionStorage.getItem(slideTimerStorageKey()) || "{}");
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveSlideTimerStarts() {
+  try {
+    sessionStorage.setItem(slideTimerStorageKey(), JSON.stringify(slideTimerStarts));
+  } catch (e) {}
+}
+
+function resetSlideTimerStarts() {
+  slideTimerStarts = {};
+  try {
+    sessionStorage.removeItem(slideTimerStorageKey());
+  } catch (e) {}
+}
+
+function slideNumber(slide) {
+  const index = deckSlides.findIndex((item) => item.id === slide.id);
+  return index >= 0 ? index + 1 : selectedSlideIndex + 1;
+}
+
+function slideNumberBadge(slide) {
+  return `<span class="slide-number-badge" aria-label="Slide ${slideNumber(slide)} of ${deckSlides.length}"><span>${slideNumber(slide)}</span><i>/</i>${deckSlides.length}</span>`;
+}
+
+function slideDurationSeconds(slide) {
+  const duration = Number(slide.durationSeconds);
+  return Number.isFinite(duration) && duration > 0 ? duration : 0;
+}
+
+function presentationUpdatedAtMs() {
+  const parsed = Date.parse(presentationState?.updated_at || "");
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
+function slideTimerStartMs(slide) {
+  const activatedAt = presentationUpdatedAtMs();
+  const savedStart = Number(slideTimerStarts[slide.id]) || 0;
+  if (!savedStart || activatedAt > savedStart) {
+    slideTimerStarts[slide.id] = activatedAt;
+    saveSlideTimerStarts();
+  }
+  return Number(slideTimerStarts[slide.id]) || Date.now();
+}
+
+function formatRemainingTime(seconds) {
+  const remaining = Math.max(0, Math.ceil(seconds));
+  const minutes = Math.floor(remaining / 60);
+  return `${minutes}:${String(remaining % 60).padStart(2, "0")}`;
+}
+
+function slideTimerHtml(slide) {
+  const duration = slideDurationSeconds(slide);
+  if (!duration) return "";
+  return `<div class="slide-timer" data-slide-timer data-slide-id="${esc(slide.id)}" data-slide-number="${slideNumber(slide)}" data-duration-seconds="${duration}" data-started-at="${slideTimerStartMs(slide)}" role="timer" aria-live="off"><div class="slide-timer-face"><span class="slide-timer-hand"></span><span class="slide-timer-digits" aria-hidden="true"></span></div></div>`;
+}
+
+function stopSlideTimer() {
+  if (slideTimerInterval) {
+    clearInterval(slideTimerInterval);
+    slideTimerInterval = null;
+  }
+}
+
+function updateSlideTimer() {
+  const timer = document.querySelector("[data-slide-timer]");
+  if (!timer) return;
+  const duration = Number(timer.dataset.durationSeconds) || 0;
+  const startedAt = Number(timer.dataset.startedAt) || Date.now();
+  const elapsed = Math.max(0, (Date.now() - startedAt) / 1000);
+  const remaining = Math.max(0, duration - elapsed);
+  const ratio = duration ? Math.max(0, Math.min(1, remaining / duration)) : 0;
+  const handAngle = (1 - ratio) * 360;
+  timer.style.setProperty("--timer-hand-angle", `${handAngle}deg`);
+  timer.classList.toggle("timer-warning", remaining <= 60);
+  timer.classList.toggle("timer-final", remaining <= 30);
+  timer.classList.toggle("timer-expired", remaining <= 0);
+  const digits = timer.querySelector(".slide-timer-digits");
+  if (digits) digits.textContent = formatRemainingTime(remaining);
+  timer.setAttribute("aria-label", `Slide ${timer.dataset.slideNumber} timer: ${formatRemainingTime(remaining)} remaining`);
+}
+
+function startSlideTimer() {
+  stopSlideTimer();
+  updateSlideTimer();
+  slideTimerInterval = setInterval(updateSlideTimer, 1000);
+}
+
 async function renderPresentation() {
   const slide = currentSlide();
   if (slide.template === "requirements-capture" || slide.template === "suggestion-capture" || slide.template === "workflow-capture") {
@@ -225,7 +324,7 @@ function slideShell(slide, body) {
     ".question-list",
     ".bot-results-view",
   ]) : null;
-  app.innerHTML = `<div class="podium-shell presentation-shell template-${esc(slide.template || "standard")}${transitionClass}"><header class="presentation-top"><div class="slide-heading"><div class="brand-row">${brandMark()}${section}</div><h1>${esc(slide.title)}</h1></div><div class="join-box" aria-label="Join on your phone"><img class="qr-code" src="${esc(qrImageUrl())}" alt="QR code for participant app"><span class="join-caption">Scan to join</span></div></header>${body}<footer class="presentation-controls"><div class="presenter-nav"><button class="btn secondary" id="prev">Back</button><span class="slide-count">${selectedSlideIndex + 1}<i>/</i>${deckSlides.length}</span><button class="btn primary" id="next">Next</button></div><div class="presenter-tools"><button class="btn ghost" id="slide-list">Slide list</button><button class="btn ghost" id="edit-slide">Edit slide</button><button class="btn ghost" id="grid">Live grid</button><button class="btn ghost" id="reset">Reset</button></div></footer><div class="presenter-hint" aria-hidden="true">Controls</div></div>`;
+  app.innerHTML = `<div class="podium-shell presentation-shell template-${esc(slide.template || "standard")}${transitionClass}"><header class="presentation-top"><div class="slide-heading"><div class="brand-row">${brandMark()}${section}</div><h1>${slideNumberBadge(slide)}<span class="slide-title-text">${esc(slide.title)}</span></h1></div><div class="join-box" aria-label="Join on your phone"><img class="qr-code" src="${esc(qrImageUrl())}" alt="QR code for participant app"><span class="join-caption">Scan to join</span></div></header>${body}<footer class="presentation-controls"><div class="presenter-nav"><button class="btn secondary" id="prev">Back</button><span class="slide-count">${selectedSlideIndex + 1}<i>/</i>${deckSlides.length}</span><button class="btn primary" id="next">Next</button></div><div class="presenter-tools"><button class="btn ghost" id="slide-list">Slide list</button><button class="btn ghost" id="edit-slide">Edit slide</button><button class="btn ghost" id="grid">Live grid</button><button class="btn ghost" id="reset">Reset</button></div></footer>${slideTimerHtml(slide)}<div class="presenter-hint" aria-hidden="true">Controls</div></div>`;
   lastRenderedSlideId = slide.id;
   pendingSlideTransition = "none";
   document.querySelector("#prev").onclick = () => activateSlide(selectedSlideIndex - 1);
@@ -236,8 +335,13 @@ function slideShell(slide, body) {
     viewMode = "grid";
     renderGrid();
   };
-  document.querySelector("#reset").onclick = () => confirm("Wipe workshop data?") && api("/api/podium/reset", { method: "POST" }).then(load);
+  document.querySelector("#reset").onclick = () => {
+    if (!confirm("Wipe workshop data?")) return;
+    resetSlideTimerStarts();
+    api("/api/podium/reset", { method: "POST" }).then(load);
+  };
   restoreScrollState(scrollState);
+  startSlideTimer();
 }
 
 function renderSlideListLegacy() {
@@ -878,6 +982,7 @@ function sortedSessions() {
 }
 
 function renderGrid() {
+  stopSlideTimer();
   detail = null;
   document.querySelector(".result-detail-overlay")?.remove();
   app.innerHTML = `<div class="podium-shell"><header class="podium-header"><div class="podium-title">${brandMark()}<h1>Prompt Playground Podium</h1><p>${sessions.length} participants live</p></div><div class="podium-actions"><span class="badge">Scenario pool: ${scenarios.length}</span><button class="btn secondary" id="slides">Slides</button><button class="btn secondary" id="reset">Reset</button></div></header>${summaryStrip()}<div class="sortbar"><button class="btn ${sortMode === "leaderboard" ? "primary" : "secondary"}" data-sort="leaderboard">Leaderboard</button><button class="btn ${sortMode === "improved" ? "primary" : "secondary"}" data-sort="improved">Most improved</button></div><section class="grid">${sortedSessions().map(card).join("")}</section></div>`;
@@ -886,7 +991,11 @@ function renderGrid() {
     sortMode = b.dataset.sort;
     renderGrid();
   }));
-  document.querySelector("#reset").onclick = () => confirm("Wipe sessions, instructions, and runs?") && api("/api/podium/reset", { method: "POST" }).then(load);
+  document.querySelector("#reset").onclick = () => {
+    if (!confirm("Wipe sessions, instructions, and runs?")) return;
+    resetSlideTimerStarts();
+    api("/api/podium/reset", { method: "POST" }).then(load);
+  };
   document.querySelector("#slides").onclick = () => {
     viewMode = "presentation";
     renderPresentation();
