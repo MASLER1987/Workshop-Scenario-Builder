@@ -17,9 +17,14 @@ let selectedSlideIndex = 0;
 let draggingSlideId = null;
 let lastRenderedSlideId = null;
 let pendingSlideTransition = "none";
+let pendingSlideImage = null;
+let pendingSlideImageFile = null;
+let pendingSlideImagePreviewUrl = "";
 
 const SLIDE_ASSIGNEES = ["JS", "MC", "MH", "EW"];
 const SLIDE_DURATIONS = [5, 10, 15];
+const SLIDE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_SLIDE_IMAGE_BYTES = 5 * 1024 * 1024;
 
 const SLIDE_TEMPLATE_OPTIONS = [
   { value: "standard", label: "Standard slide", participantMode: "passive", podiumType: "slide" },
@@ -450,16 +455,28 @@ function slidePlanningControls(slide, index) {
 function openSlideEditor(slide) {
   const existing = document.querySelector(".edit-slide-panel");
   if (existing) existing.remove();
+  pendingSlideImage = normaliseSlideImage(slide.image);
+  pendingSlideImageFile = null;
+  revokeSlideImagePreview();
   const bullets = (slide.bullets || []).join("\n");
   const placeholder = slide.template === "interaction" ? interactionPromptText(slide) : slide.interaction?.placeholder || "";
-  document.body.insertAdjacentHTML("beforeend", `<aside class="edit-slide-panel"><form id="slide-edit-form"><header><div><span class="eyebrow">Slide editor</span><h2>${esc(slide.title)}</h2></div><button type="button" class="icon-close" id="close-editor" aria-label="Close">x</button></header><label>Template<select id="edit-template">${optionHtml(SLIDE_TEMPLATE_OPTIONS, slide.template || "standard")}</select></label><label>Phone mode<select id="edit-participant-mode">${optionHtml(PARTICIPANT_MODE_OPTIONS, slide.participantMode || "passive")}</select></label><label>Section<input id="edit-section" maxlength="80" value="${esc(slide.section || "")}"></label><label>Title<input id="edit-title" maxlength="140" value="${esc(slide.title || "")}"></label><label>Body<textarea id="edit-body" rows="6">${esc(slide.body || "")}</textarea></label><label>Bullets<textarea id="edit-bullets" rows="5" placeholder="One bullet per line">${esc(bullets)}</textarea></label><label>Phone prompt<textarea id="edit-placeholder" rows="3">${esc(placeholder)}</textarea></label><div class="edit-slide-actions"><button type="button" class="btn danger" id="delete-slide">Delete slide</button><button type="button" class="btn secondary" id="reset-slide-override">Reset default</button><button type="button" class="btn secondary" id="cancel-slide-edit">Cancel</button><button type="submit" class="btn primary">Save</button></div></form></aside>`);
+  document.body.insertAdjacentHTML("beforeend", `<aside class="edit-slide-panel"><form id="slide-edit-form"><header><div><span class="eyebrow">Slide editor</span><h2>${esc(slide.title)}</h2></div><button type="button" class="icon-close" id="close-editor" aria-label="Close">x</button></header><label>Template<select id="edit-template">${optionHtml(SLIDE_TEMPLATE_OPTIONS, slide.template || "standard")}</select></label><label>Phone mode<select id="edit-participant-mode">${optionHtml(PARTICIPANT_MODE_OPTIONS, slide.participantMode || "passive")}</select></label><label>Section<input id="edit-section" maxlength="80" value="${esc(slide.section || "")}"></label><label>Title<input id="edit-title" maxlength="140" value="${esc(slide.title || "")}"></label><label>Body<textarea id="edit-body" rows="6">${esc(slide.body || "")}</textarea></label><label>Bullets<textarea id="edit-bullets" rows="5" placeholder="One bullet per line">${esc(bullets)}</textarea></label>${slideImageEditorHtml()}<label>Phone prompt<textarea id="edit-placeholder" rows="3">${esc(placeholder)}</textarea></label><div class="edit-slide-actions"><button type="button" class="btn danger" id="delete-slide">Delete slide</button><button type="button" class="btn secondary" id="reset-slide-override">Reset default</button><button type="button" class="btn secondary" id="cancel-slide-edit">Cancel</button><button type="submit" class="btn primary">Save</button></div></form></aside>`);
   document.querySelector("#close-editor").onclick = closeSlideEditor;
   document.querySelector("#cancel-slide-edit").onclick = closeSlideEditor;
   document.querySelector("#reset-slide-override").onclick = () => resetSlideOverride(slide.id);
   document.querySelector("#delete-slide").onclick = () => deleteSlide(slide.id);
+  document.querySelector("#edit-slide-image").onchange = handleSlideImageSelection;
+  document.querySelector("#remove-slide-image").onclick = () => {
+    pendingSlideImageFile = null;
+    revokeSlideImagePreview();
+    pendingSlideImage = null;
+    updateSlideImageEditor();
+  };
+  syncSlideImageAvailability();
   document.querySelector("#edit-template").onchange = (event) => {
     const defaults = templateDefaults(event.target.value);
     document.querySelector("#edit-participant-mode").value = defaults.participantMode;
+    syncSlideImageAvailability();
     if (defaults.interaction && !document.querySelector("#edit-placeholder").value.trim()) {
       document.querySelector("#edit-placeholder").value = defaults.interaction.placeholder || "";
     }
@@ -472,12 +489,101 @@ function openSlideEditor(slide) {
 
 function closeSlideEditor() {
   document.querySelector(".edit-slide-panel")?.remove();
+  revokeSlideImagePreview();
+  pendingSlideImage = null;
+  pendingSlideImageFile = null;
+}
+
+function normaliseSlideImage(image) {
+  if (!image) return null;
+  if (typeof image === "string") return { src: image, name: "Slide image" };
+  if (typeof image.src !== "string") return null;
+  if (!image.src.startsWith("/api/podium/slides/") && !image.src.startsWith("data:image/") && !image.src.startsWith("blob:")) return null;
+  return { src: image.src, name: image.name || "Slide image", type: image.type || "" };
+}
+
+function slideImageSource(image) {
+  const src = image?.src || "";
+  if (!src.startsWith("/api/podium/slides/")) return src;
+  return `${src}${src.includes("?") ? "&" : "?"}key=${encodeURIComponent(key)}`;
+}
+
+function slideImageEditorHtml(message = "") {
+  const preview = pendingSlideImage
+    ? `<img src="${esc(slideImageSource(pendingSlideImage))}" alt="${esc(pendingSlideImage.name || "Selected slide image")}">`
+    : '<span>No image selected</span>';
+  return `<fieldset class="slide-image-field" id="slide-image-field"><legend>Slide image</legend><div class="slide-image-preview" id="slide-image-preview">${preview}</div><div class="slide-image-controls"><label class="slide-image-upload" for="edit-slide-image">Choose image<input id="edit-slide-image" type="file" accept="image/jpeg,image/png,image/webp"></label><button type="button" class="btn secondary" id="remove-slide-image" ${pendingSlideImage ? "" : "disabled"}>Remove</button></div><p class="slide-image-help">JPEG, PNG or WebP up to 5 MB. The image sits beside bullets or spans the slide when there are no bullets.</p><p class="slide-image-message" id="slide-image-message" aria-live="polite">${esc(message)}</p></fieldset>`;
+}
+
+function syncSlideImageAvailability() {
+  const field = document.querySelector("#slide-image-field");
+  const template = document.querySelector("#edit-template");
+  if (field && template) field.hidden = template.value !== "standard";
+}
+
+function updateSlideImageEditor(message = "") {
+  const preview = document.querySelector("#slide-image-preview");
+  const remove = document.querySelector("#remove-slide-image");
+  const status = document.querySelector("#slide-image-message");
+  if (preview) {
+    preview.innerHTML = pendingSlideImage
+      ? `<img src="${esc(slideImageSource(pendingSlideImage))}" alt="${esc(pendingSlideImage.name || "Selected slide image")}">`
+      : "<span>No image selected</span>";
+  }
+  if (remove) remove.disabled = !pendingSlideImage;
+  if (status) status.textContent = message;
+}
+
+function validateSlideImage(file) {
+  if (!SLIDE_IMAGE_TYPES.has(file.type)) throw new Error("Choose a JPEG, PNG or WebP image.");
+  if (file.size > MAX_SLIDE_IMAGE_BYTES) throw new Error("Choose an image smaller than 5 MB.");
+}
+
+function revokeSlideImagePreview() {
+  if (!pendingSlideImagePreviewUrl) return;
+  URL.revokeObjectURL(pendingSlideImagePreviewUrl);
+  pendingSlideImagePreviewUrl = "";
+}
+
+async function handleSlideImageSelection(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    validateSlideImage(file);
+    revokeSlideImagePreview();
+    pendingSlideImagePreviewUrl = URL.createObjectURL(file);
+    pendingSlideImageFile = file;
+    pendingSlideImage = { src: pendingSlideImagePreviewUrl, name: file.name, type: file.type };
+    updateSlideImageEditor(`${file.name} ready to save.`);
+  } catch (error) {
+    event.target.value = "";
+    updateSlideImageEditor(error.message);
+  }
+}
+
+async function uploadSlideImage(slideId, file) {
+  return api(`/api/podium/slides/${encodeURIComponent(slideId)}/image`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type,
+      "X-Filename": encodeURIComponent(file.name),
+    },
+    body: file,
+  });
 }
 
 async function saveSlideOverride(slide) {
   const bulletLines = document.querySelector("#edit-bullets").value.split("\n").map((line) => line.trim()).filter(Boolean);
   const template = document.querySelector("#edit-template").value;
   const defaults = templateDefaults(template);
+  await persistCurrentDeck();
+  let savedImage = pendingSlideImage;
+  if (pendingSlideImageFile) {
+    updateSlideImageEditor("Uploading image...");
+    savedImage = (await uploadSlideImage(slide.id, pendingSlideImageFile)).image;
+  } else if (!pendingSlideImage && normaliseSlideImage(slide.image)) {
+    await api(`/api/podium/slides/${encodeURIComponent(slide.id)}/image`, { method: "DELETE" });
+  }
   const payload = {
     ...defaults,
     template: document.querySelector("#edit-template").value,
@@ -486,12 +592,12 @@ async function saveSlideOverride(slide) {
     title: document.querySelector("#edit-title").value.trim(),
     body: document.querySelector("#edit-body").value.trim(),
     bullets: bulletLines,
+    image: savedImage,
   };
   const placeholder = document.querySelector("#edit-placeholder");
   if (placeholder && placeholder.value.trim()) {
     payload.interaction = { ...(payload.interaction || {}), placeholder: placeholder.value.trim() };
   }
-  await persistCurrentDeck();
   await api(`/api/podium/slides/${encodeURIComponent(slide.id)}`, {
     method: "PATCH",
     body: JSON.stringify({ payload }),
@@ -511,12 +617,15 @@ async function saveSlideOverride(slide) {
 
 async function resetSlideOverride(slideId) {
   await api(`/api/podium/slide-overrides/${encodeURIComponent(slideId)}`, { method: "DELETE" });
+  await api(`/api/podium/slides/${encodeURIComponent(slideId)}/image`, { method: "DELETE" });
   delete slideOverrides[slideId];
   const builtin = PRESENTATION_SLIDES.find((slide) => slide.id === slideId);
   if (builtin) {
     deckSlides = deckSlides.map((item) => item.id === slideId ? { ...builtin } : item);
-    if (deckPersisted) await persistCurrentDeck();
+  } else {
+    deckSlides = deckSlides.map((item) => item.id === slideId ? { ...item, image: null } : item);
   }
+  if (deckPersisted) await persistCurrentDeck();
   closeSlideEditor();
   renderPresentation();
 }
@@ -554,7 +663,11 @@ async function deleteSlide(slideId) {
 
 function renderStandardSlide(slide) {
   const bullets = (slide.bullets || []).map((item) => `<li>${esc(item)}</li>`).join("");
-  slideShell(slide, `<section class="presentation-card standard-slide"><p>${esc(slide.body || "")}</p>${bullets ? `<ul>${bullets}</ul>` : ""}</section>`);
+  const image = normaliseSlideImage(slide.image);
+  const imageHtml = image ? `<figure class="slide-image-frame"><img src="${esc(slideImageSource(image))}" alt="${esc(image.name || "")}"></figure>` : "";
+  const copy = `<div class="standard-slide-copy"><p>${esc(slide.body || "")}</p>${bullets ? `<ul>${bullets}</ul>` : ""}</div>`;
+  const layoutClass = image ? ` has-image ${bullets ? "has-bullets" : "no-bullets"}` : "";
+  slideShell(slide, `<section class="presentation-card standard-slide${layoutClass}">${copy}${imageHtml}</section>`);
 }
 
 function interactionPromptText(slide) {
