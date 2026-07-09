@@ -159,6 +159,35 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertNotIn('class="badge edited-badge">Edited</span>', source)
         self.assertNotIn('<p class="eyebrow">${esc(slide.section)}</p>', source)
 
+    def test_standard_slides_accept_and_render_uploaded_images(self):
+        source = (ROOT / "static" / "podium.js").read_text()
+        style = (ROOT / "static" / "style.css").read_text()
+
+        self.assertIn('id="edit-slide-image" type="file"', source)
+        self.assertIn('accept="image/jpeg,image/png,image/webp"', source)
+        self.assertIn("MAX_SLIDE_IMAGE_BYTES", source)
+        self.assertIn("URL.createObjectURL(file)", source)
+        self.assertIn("uploadSlideImage", source)
+        self.assertIn('/image`, { method: "DELETE"', source)
+        self.assertIn("image: savedImage", source)
+        self.assertIn('class="slide-image-frame"', source)
+        self.assertIn('bullets ? "has-bullets" : "no-bullets"', source)
+        self.assertIn(".standard-slide.has-image.has-bullets", style)
+        self.assertIn("grid-template-columns:minmax(0,1.08fr) minmax(320px,.92fr)", style)
+        self.assertIn(".standard-slide.no-bullets .slide-image-frame", style)
+
+    def test_slide_images_are_stored_separately_from_slide_json(self):
+        main_source = (ROOT / "app" / "main.py").read_text()
+        db_source = (ROOT / "app" / "db.py").read_text()
+
+        self.assertIn("presentation_slide_images", db_source)
+        self.assertIn("content BYTEA NOT NULL", db_source)
+        self.assertIn('@app.put("/api/podium/slides/{slide_id}/image")', main_source)
+        self.assertIn('@app.get("/api/podium/slides/{slide_id}/image")', main_source)
+        self.assertIn('@app.delete("/api/podium/slides/{slide_id}/image")', main_source)
+        self.assertIn("valid_slide_image_signature", main_source)
+        self.assertIn("MAX_SLIDE_IMAGE_BYTES", main_source)
+
     def test_podium_join_box_uses_app_generated_qr_code(self):
         main_source = (ROOT / "app" / "main.py").read_text()
         podium_source = (ROOT / "static" / "podium.js").read_text()

@@ -217,6 +217,13 @@ async def init_db() -> None:
           created_at TIMESTAMPTZ DEFAULT now(),
           updated_at TIMESTAMPTZ DEFAULT now()
         );
+        CREATE TABLE IF NOT EXISTS presentation_slide_images (
+          slide_id TEXT PRIMARY KEY REFERENCES presentation_slides(slide_id) ON DELETE CASCADE,
+          content BYTEA NOT NULL,
+          mime_type TEXT NOT NULL,
+          filename TEXT NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT now()
+        );
         CREATE UNIQUE INDEX IF NOT EXISTS one_active_scenario ON scenarios ((is_active)) WHERE is_active;
         """)
         await con.execute(

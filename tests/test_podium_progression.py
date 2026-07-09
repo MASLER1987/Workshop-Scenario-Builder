@@ -82,6 +82,8 @@ class PodiumProgressionTests(unittest.TestCase):
         self.assertIn("slideTimerStarts", script)
         self.assertIn("function slideTimerStartMs", script)
         self.assertIn("presentationState?.updated_at", script)
+        self.assertIn("const activatedAt = presentationUpdatedAtMs()", script)
+        self.assertIn("activatedAt > savedStart", script)
         self.assertIn("durationSeconds", script)
         self.assertIn("data-slide-timer", script)
         self.assertIn("setInterval(updateSlideTimer, 1000)", script)

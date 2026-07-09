@@ -3,8 +3,9 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from io import BytesIO
+from urllib.parse import quote, unquote
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -64,6 +65,18 @@ class SlideDeckIn(BaseModel):
 
 class SlideOrderIn(BaseModel):
     slide_ids: list[str] = Field(default_factory=list)
+
+SLIDE_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MAX_SLIDE_IMAGE_BYTES = 5 * 1024 * 1024
+
+def valid_slide_image_signature(content: bytes, mime_type: str) -> bool:
+    if mime_type == "image/jpeg":
+        return content.startswith(b"\xff\xd8\xff")
+    if mime_type == "image/png":
+        return content.startswith(b"\x89PNG\r\n\x1a\n")
+    if mime_type == "image/webp":
+        return len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP"
+    return False
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -609,6 +622,69 @@ async def podium_reorder_slides(body: SlideOrderIn, key: str = Query(...)):
                 )
     return {"ok": True}
 
+@app.get("/api/podium/slides/{slide_id}/image")
+async def podium_slide_image(slide_id: str, key: str = Query(...)):
+    podium_auth(key)
+    row = await db.fetchrow(
+        "SELECT content, mime_type FROM presentation_slide_images WHERE slide_id=$1",
+        slide_id,
+    )
+    if not row:
+        raise HTTPException(404, "Slide image not found")
+    return Response(
+        content=bytes(row["content"]),
+        media_type=row["mime_type"],
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+    )
+
+@app.put("/api/podium/slides/{slide_id}/image")
+async def podium_upload_slide_image(slide_id: str, request: Request, key: str = Query(...)):
+    podium_auth(key)
+    mime_type = (request.headers.get("content-type") or "").split(";", 1)[0].lower()
+    if mime_type not in SLIDE_IMAGE_TYPES:
+        raise HTTPException(415, "Upload a JPEG, PNG or WebP image")
+    content = await request.body()
+    if not content:
+        raise HTTPException(400, "Image file is empty")
+    if len(content) > MAX_SLIDE_IMAGE_BYTES:
+        raise HTTPException(413, "Image must be smaller than 5 MB")
+    if not valid_slide_image_signature(content, mime_type):
+        raise HTTPException(415, "The file content does not match its image type")
+    slide_exists = await db.fetchrow(
+        "SELECT 1 FROM presentation_slides WHERE slide_id=$1 AND is_deleted=false",
+        slide_id,
+    )
+    if not slide_exists:
+        raise HTTPException(404, "Slide not found")
+    filename = unquote(request.headers.get("x-filename") or "Slide image")[:255]
+    version = uuid.uuid4().hex[:12]
+    await db.execute(
+        """INSERT INTO presentation_slide_images (slide_id, content, mime_type, filename)
+           VALUES ($1,$2,$3,$4)
+           ON CONFLICT (slide_id)
+           DO UPDATE SET content=excluded.content,
+                         mime_type=excluded.mime_type,
+                         filename=excluded.filename,
+                         updated_at=now()""",
+        slide_id,
+        content,
+        mime_type,
+        filename,
+    )
+    return {
+        "image": {
+            "src": f"/api/podium/slides/{quote(slide_id, safe='')}/image?v={version}",
+            "name": filename,
+            "type": mime_type,
+        }
+    }
+
+@app.delete("/api/podium/slides/{slide_id}/image")
+async def podium_delete_slide_image(slide_id: str, key: str = Query(...)):
+    podium_auth(key)
+    await db.execute("DELETE FROM presentation_slide_images WHERE slide_id=$1", slide_id)
+    return {"ok": True}
+
 @app.patch("/api/podium/slides/{slide_id}")
 async def podium_save_slide_override(slide_id: str, body: SlideOverrideIn, key: str = Query(...)):
     podium_auth(key)
@@ -640,6 +716,7 @@ async def podium_delete_slide(slide_id: str, key: str = Query(...)):
     async with (await db.pool()).acquire() as con:
         async with con.transaction():
             await con.execute("DELETE FROM presentation_slide_overrides WHERE slide_id=$1", slide_id)
+            await con.execute("DELETE FROM presentation_slide_images WHERE slide_id=$1", slide_id)
             await con.execute(
                 "UPDATE presentation_slides SET is_deleted=true, updated_at=now() WHERE slide_id=$1",
                 slide_id,
