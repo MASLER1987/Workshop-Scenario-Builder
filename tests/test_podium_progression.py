@@ -74,3 +74,16 @@ class PodiumProgressionTests(unittest.TestCase):
         self.assertIn("restoreScrollState(scrollState)", script)
         self.assertIn(".presentation-card", script)
         self.assertIn(".curation-layout>section", script)
+
+    def test_results_detail_opens_as_overlay_without_replacing_slide(self):
+        script = (ROOT / "static" / "podium.js").read_text()
+        style = (ROOT / "static" / "style.css").read_text()
+
+        self.assertIn("function closeDetail", script)
+        self.assertIn("result-detail-overlay", script)
+        self.assertIn('document.body.insertAdjacentHTML("beforeend"', script)
+        self.assertNotIn('app.innerHTML = `<div class="podium-shell detail-shell"', script)
+        self.assertIn(".result-detail-overlay", style)
+        self.assertIn("close-result-detail", script)
+        self.assertIn('event.key === "Escape" && detail', script)
+        self.assertIn("nextPresentation.active_slide_id !== presentationState.active_slide_id", script)

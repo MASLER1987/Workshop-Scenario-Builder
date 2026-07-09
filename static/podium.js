@@ -672,6 +672,7 @@ function sortedSessions() {
 
 function renderGrid() {
   detail = null;
+  document.querySelector(".result-detail-overlay")?.remove();
   app.innerHTML = `<div class="podium-shell"><header class="podium-header"><div class="podium-title">${brandMark()}<h1>Prompt Playground Podium</h1><p>${sessions.length} participants live</p></div><div class="podium-actions"><span class="badge">Scenario pool: ${scenarios.length}</span><button class="btn secondary" id="slides">Slides</button><button class="btn secondary" id="reset">Reset</button></div></header>${summaryStrip()}<div class="sortbar"><button class="btn ${sortMode === "leaderboard" ? "primary" : "secondary"}" data-sort="leaderboard">Leaderboard</button><button class="btn ${sortMode === "improved" ? "primary" : "secondary"}" data-sort="improved">Most improved</button></div><section class="grid">${sortedSessions().map(card).join("")}</section></div>`;
   document.querySelectorAll(".card").forEach((c) => (c.onclick = () => openDetail(c.dataset.id)));
   document.querySelectorAll("[data-sort]").forEach((b) => (b.onclick = () => {
@@ -704,14 +705,20 @@ async function openDetail(id) {
   renderDetail();
 }
 
+function closeDetail() {
+  detail = null;
+  document.querySelector(".result-detail-overlay")?.remove();
+}
+
 function renderDetail(runId) {
   const d = detail.data;
   const run = runId ? d.run_history.find((r) => r.id === runId) : d.latest_run;
   const instruction = run?.instruction_text || d.latest_instruction?.text || "No instruction yet";
   const transcript = run?.transcript || [];
-  const scrollState = runId ? null : captureScrollState([".pane"]);
-  app.innerHTML = `<div class="podium-shell detail-shell"><header class="podium-header detail-header"><button class="btn secondary" id="back">Back</button>${progressionHeader(d.run_history)}</header><div class="detail"><section class="pane"><h2>Instruction <span class="badge">v${run?.version_number || d.latest_instruction?.version_number || "new"}</span></h2><div class="instruction">${esc(instruction)}</div><div class="history">${d.run_history.map((r) => `<button class="btn secondary ${run?.id === r.id ? "selected" : ""}" data-run="${r.id}">v${r.version_number} ${scoreText(r)}</button>`).join("")}</div></section><section class="pane"><h2>Conversation</h2><div class="chat">${chat(transcript)}</div>${scorePanel(run?.score)}</section></div></div>`;
-  document.querySelector("#back").onclick = load;
+  const scrollState = runId ? null : captureScrollState([".result-detail-overlay .pane"]);
+  document.querySelector(".result-detail-overlay")?.remove();
+  document.body.insertAdjacentHTML("beforeend", `<aside class="result-detail-overlay" role="dialog" aria-modal="true" aria-label="Participant result"><div class="podium-shell detail-shell"><header class="podium-header detail-header"><button class="btn secondary" id="close-result-detail">Back to slide</button>${progressionHeader(d.run_history)}</header><div class="detail"><section class="pane"><h2>Instruction <span class="badge">v${run?.version_number || d.latest_instruction?.version_number || "new"}</span></h2><div class="instruction">${esc(instruction)}</div><div class="history">${d.run_history.map((r) => `<button class="btn secondary ${run?.id === r.id ? "selected" : ""}" data-run="${r.id}">v${r.version_number} ${scoreText(r)}</button>`).join("")}</div></section><section class="pane"><h2>Conversation</h2><div class="chat">${chat(transcript)}</div>${scorePanel(run?.score)}</section></div></div></aside>`);
+  document.querySelector("#close-result-detail").onclick = closeDetail;
   document.querySelectorAll("[data-run]").forEach((b) => (b.onclick = () => renderDetail(b.dataset.run)));
   restoreScrollState(scrollState);
 }
@@ -773,6 +780,11 @@ function inPresentation() {
 }
 
 document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && detail) {
+    event.preventDefault();
+    closeDetail();
+    return;
+  }
   const target = event.target;
   const tag = (target?.tagName || "").toLowerCase();
   if (tag === "input" || tag === "textarea" || tag === "select" || target?.isContentEditable) return;
@@ -794,6 +806,14 @@ document.addEventListener("mousemove", (event) => {
 setInterval(async () => {
   try {
     if (detail) {
+      const nextPresentation = await api("/api/podium/presentation");
+      if (presentationState?.active_slide_id && nextPresentation.active_slide_id !== presentationState.active_slide_id) {
+        presentationState = nextPresentation;
+        closeDetail();
+        await load();
+        return;
+      }
+      presentationState = nextPresentation;
       detail.data = await api(`/api/podium/sessions/${detail.id}`);
       summary = await api("/api/podium/summary");
       renderDetail();
