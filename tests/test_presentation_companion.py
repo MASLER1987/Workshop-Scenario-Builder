@@ -77,6 +77,8 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn("saveArtifact", source)
         self.assertIn("renderByTemplate", source)
         self.assertIn("renderInteractionSlide", source)
+        self.assertIn("Assistant Builder slide", source)
+        self.assertIn("Open the Assistant Builder on your phone.", source)
         self.assertIn("interactionPromptText", source)
         self.assertIn("${bullets ? `<ul>${bullets}</ul>` : \"\"}", source)
         self.assertIn("${esc(interactionPromptText(slide))}", source)

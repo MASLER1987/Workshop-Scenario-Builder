@@ -102,7 +102,7 @@ function render() {
     renderCompanion(participantMode);
     return;
   }
-  app.innerHTML = `<section class="phone-screen bot-builder-view"><header class="bot-workspace-head"><div><strong>${esc(state.name)}</strong><h1>Write your bot instructions</h1></div><span class="badge">v${state.version || "new"}</span></header>${capturedRequirementsHtml()}<label class="instruction-editor" for="instruction"><span>Instructions</span><textarea id="instruction" class="instruction-input" maxlength="4000" placeholder="Write the instructions for your intake chatbot...">${esc(state.instruction)}</textarea></label></section><div class="bar"><button class="btn secondary" id="brief">Client brief</button><button class="btn primary" id="run" ${state.instruction.trim() ? "" : "disabled"}>Run test</button></div>`;
+  app.innerHTML = `<section class="phone-screen bot-builder-view"><header class="bot-workspace-head"><div><strong>${esc(state.name)}</strong><h1>Assistant Builder</h1></div><span class="badge">v${state.version || "new"}</span></header>${capturedRequirementsHtml()}<label class="instruction-editor" for="instruction"><span>Instructions</span><textarea id="instruction" class="instruction-input" maxlength="4000" placeholder="Write the instructions for your assistant...">${esc(state.instruction)}</textarea></label></section><div class="bar"><button class="btn secondary" id="brief">Client brief</button><button class="btn primary" id="run" ${state.instruction.trim() ? "" : "disabled"}>Run test</button></div>`;
   $("#instruction").oninput = (e) => {
     state.instruction = e.target.value;
     $("#run").disabled = !state.instruction.trim();
@@ -156,7 +156,7 @@ async function load() {
 
 async function loadPresentationState() {
   state.presentation = await api("/api/presentation/state");
-  state.captured_requirements = state.presentation.captured_requirements || state.captured_requirements;
+  state.captured_requirements = state.presentation.captured_requirements;
   if (state.presentation.participant_mode === "process") {
     state.responses = await api(`/api/presentation/responses?slide_id=${encodeURIComponent(state.presentation.active_slide_id)}`);
   }

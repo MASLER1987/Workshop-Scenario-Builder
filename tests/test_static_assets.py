@@ -12,14 +12,14 @@ class StaticAssetTests(unittest.TestCase):
         self.assertIn('viewport-fit=cover', html)
         self.assertIn('/static/style.css?v=presentation-27', html)
         self.assertIn('/static/presentation.js?v=presentation-18', html)
-        self.assertIn('/static/app.js?v=presentation-29', html)
+        self.assertIn('/static/app.js?v=presentation-30', html)
 
     def test_podium_cache_busts_assets(self):
         html = (ROOT / "static" / "podium.html").read_text()
 
         self.assertIn('/static/style.css?v=presentation-25', html)
         self.assertIn('/static/presentation.js?v=presentation-20', html)
-        self.assertIn('/static/podium.js?v=presentation-29', html)
+        self.assertIn('/static/podium.js?v=presentation-30', html)
 
     def test_participant_stream_loop_yields_to_browser_paint(self):
         script = (ROOT / "static" / "app.js").read_text()
@@ -118,12 +118,20 @@ class StaticAssetTests(unittest.TestCase):
         style = (ROOT / "static" / "style.css").read_text()
 
         self.assertIn("bot-builder-view", script)
+        self.assertIn("Assistant Builder", script)
+        self.assertIn("Write the instructions for your assistant", script)
         self.assertIn("instruction-input", script)
         self.assertIn("test-view", script)
         self.assertIn("transcript-chat", script)
         self.assertIn(".bot-builder-view,.test-view", style)
         self.assertIn(".instruction-input{flex:1", style)
         self.assertIn(".transcript-chat{flex:1", style)
+
+    def test_phone_clears_class_requirements_when_reset_removes_artifact(self):
+        script = (ROOT / "static" / "app.js").read_text()
+
+        self.assertIn("state.captured_requirements = state.presentation.captured_requirements", script)
+        self.assertNotIn("state.presentation.captured_requirements || state.captured_requirements", script)
 
     def test_all_participant_modes_use_mobile_screen_layout(self):
         script = (ROOT / "static" / "app.js").read_text()

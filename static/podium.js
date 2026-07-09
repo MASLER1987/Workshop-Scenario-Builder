@@ -20,7 +20,7 @@ let pendingSlideTransition = "none";
 
 const SLIDE_TEMPLATE_OPTIONS = [
   { value: "standard", label: "Standard slide", participantMode: "passive", podiumType: "slide" },
-  { value: "interaction", label: "Bot building slide", participantMode: "bot", podiumType: "activity", interaction: { placeholder: "Open the bot builder on your phone." } },
+  { value: "interaction", label: "Assistant Builder slide", participantMode: "bot", podiumType: "activity", interaction: { placeholder: "Open the Assistant Builder on your phone." } },
   { value: "bot-results", label: "Bot results slide", participantMode: "results", podiumType: "live" },
   { value: "qna-review", label: "Q&A review slide", participantMode: "qna", podiumType: "interactive" },
   { value: "requirements-capture", label: "Requirements capture", participantMode: "requirements", podiumType: "interactive", interaction: { maxLength: 160, placeholder: "What should the intake bot collect, avoid, or explain?" } },
@@ -515,7 +515,7 @@ function renderStandardSlide(slide) {
 
 function interactionPromptText(slide) {
   if (slide.interaction?.placeholder) return slide.interaction.placeholder;
-  return slide.participantMode === "bot" ? "Open the bot builder on your phone." : "Follow the prompt on your phone.";
+  return slide.participantMode === "bot" ? "Open the Assistant Builder on your phone." : "Follow the prompt on your phone.";
 }
 
 function renderInteractionSlide(slide) {
