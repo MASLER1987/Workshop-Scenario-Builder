@@ -278,7 +278,7 @@ function renderTranscript() {
 }
 
 function brandMark() {
-  return '<div class="brand-mark" aria-label="VWV"><strong>VWV</strong><span class="brand-dots"><i></i><i></i><i></i></span></div>';
+  return '<img class="brand-mark" src="/static/vwv-logo.png?v=1" width="799" height="191" alt="VWV">';
 }
 
 function renderCompanion(mode) {
