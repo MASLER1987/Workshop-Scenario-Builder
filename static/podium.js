@@ -20,7 +20,7 @@ let pendingSlideTransition = "none";
 
 const SLIDE_TEMPLATE_OPTIONS = [
   { value: "standard", label: "Standard slide", participantMode: "passive", podiumType: "slide" },
-  { value: "interaction", label: "Bot building slide", participantMode: "bot", podiumType: "activity" },
+  { value: "interaction", label: "Bot building slide", participantMode: "bot", podiumType: "activity", interaction: { placeholder: "Open the bot builder on your phone." } },
   { value: "bot-results", label: "Bot results slide", participantMode: "results", podiumType: "live" },
   { value: "qna-review", label: "Q&A review slide", participantMode: "qna", podiumType: "interactive" },
   { value: "requirements-capture", label: "Requirements capture", participantMode: "requirements", podiumType: "interactive", interaction: { maxLength: 160, placeholder: "What should the intake bot collect, avoid, or explain?" } },
@@ -373,7 +373,7 @@ function openSlideEditor(slide) {
   const existing = document.querySelector(".edit-slide-panel");
   if (existing) existing.remove();
   const bullets = (slide.bullets || []).join("\n");
-  const placeholder = slide.interaction?.placeholder || "";
+  const placeholder = slide.template === "interaction" ? interactionPromptText(slide) : slide.interaction?.placeholder || "";
   document.body.insertAdjacentHTML("beforeend", `<aside class="edit-slide-panel"><form id="slide-edit-form"><header><div><span class="eyebrow">Slide editor</span><h2>${esc(slide.title)}</h2></div><button type="button" class="icon-close" id="close-editor" aria-label="Close">x</button></header><label>Template<select id="edit-template">${optionHtml(SLIDE_TEMPLATE_OPTIONS, slide.template || "standard")}</select></label><label>Phone mode<select id="edit-participant-mode">${optionHtml(PARTICIPANT_MODE_OPTIONS, slide.participantMode || "passive")}</select></label><label>Section<input id="edit-section" maxlength="80" value="${esc(slide.section || "")}"></label><label>Title<input id="edit-title" maxlength="140" value="${esc(slide.title || "")}"></label><label>Body<textarea id="edit-body" rows="6">${esc(slide.body || "")}</textarea></label><label>Bullets<textarea id="edit-bullets" rows="5" placeholder="One bullet per line">${esc(bullets)}</textarea></label><label>Phone prompt<textarea id="edit-placeholder" rows="3">${esc(placeholder)}</textarea></label><div class="edit-slide-actions"><button type="button" class="btn danger" id="delete-slide">Delete slide</button><button type="button" class="btn secondary" id="reset-slide-override">Reset default</button><button type="button" class="btn secondary" id="cancel-slide-edit">Cancel</button><button type="submit" class="btn primary">Save</button></div></form></aside>`);
   document.querySelector("#close-editor").onclick = closeSlideEditor;
   document.querySelector("#cancel-slide-edit").onclick = closeSlideEditor;
@@ -479,12 +479,18 @@ function renderStandardSlide(slide) {
   slideShell(slide, `<section class="presentation-card standard-slide"><p>${esc(slide.body || "")}</p>${bullets ? `<ul>${bullets}</ul>` : ""}</section>`);
 }
 
+function interactionPromptText(slide) {
+  if (slide.interaction?.placeholder) return slide.interaction.placeholder;
+  return slide.participantMode === "bot" ? "Open the bot builder on your phone." : "Follow the prompt on your phone.";
+}
+
 function renderInteractionSlide(slide) {
   const totalRuns = summary?.total_runs || 0;
   const tested = sessions.filter((session) => Number(session.run_count) > 0).length;
   const captured = artifacts.find((item) => item.artifact_type === "captured_requirements")?.payload?.items || [];
   const capturedHtml = captured.length ? `<div class="mini-requirements"><h3>Class requirements</h3><ul>${captured.map((item) => `<li>${esc(item.text || item)}</li>`).join("")}</ul></div>` : "";
-  slideShell(slide, `<section class="presentation-card interaction-slide"><div><p>${esc(slide.body || "")}</p><div class="activity-metrics"><span><b>${sessions.length}</b> joined</span><span><b>${tested}</b> tested</span><span><b>${totalRuns}</b> total runs</span></div>${capturedHtml}</div><div class="activity-callout"><strong>Phone task</strong><p>${slide.participantMode === "bot" ? "Open the bot builder on your phone." : "Follow the prompt on your phone."}</p></div></section>`);
+  const bullets = (slide.bullets || []).map((item) => `<li>${esc(item)}</li>`).join("");
+  slideShell(slide, `<section class="presentation-card interaction-slide"><div><p>${esc(slide.body || "")}</p>${bullets ? `<ul>${bullets}</ul>` : ""}<div class="activity-metrics"><span><b>${sessions.length}</b> joined</span><span><b>${tested}</b> tested</span><span><b>${totalRuns}</b> total runs</span></div>${capturedHtml}</div><div class="activity-callout"><strong>Phone task</strong><p>${esc(interactionPromptText(slide))}</p></div></section>`);
 }
 
 function renderLiveSlide(slide) {
