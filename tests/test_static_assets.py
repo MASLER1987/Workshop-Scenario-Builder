@@ -19,7 +19,7 @@ class StaticAssetTests(unittest.TestCase):
 
         self.assertIn('/static/style.css?v=presentation-24', html)
         self.assertIn('/static/presentation.js?v=presentation-20', html)
-        self.assertIn('/static/podium.js?v=presentation-27', html)
+        self.assertIn('/static/podium.js?v=presentation-28', html)
 
     def test_participant_stream_loop_yields_to_browser_paint(self):
         script = (ROOT / "static" / "app.js").read_text()

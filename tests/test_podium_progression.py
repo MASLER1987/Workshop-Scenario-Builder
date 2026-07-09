@@ -64,3 +64,13 @@ class PodiumProgressionTests(unittest.TestCase):
         self.assertIn("@keyframes podium-slide-forward", style)
         self.assertIn("@keyframes podium-slide-back", style)
         self.assertIn("@media(prefers-reduced-motion:reduce)", style)
+
+    def test_podium_polling_preserves_scroll_on_same_view_rerender(self):
+        script = (ROOT / "static" / "podium.js").read_text()
+
+        self.assertIn("function captureScrollState", script)
+        self.assertIn("function restoreScrollState", script)
+        self.assertIn("lastRenderedSlideId === slide.id", script)
+        self.assertIn("restoreScrollState(scrollState)", script)
+        self.assertIn(".presentation-card", script)
+        self.assertIn(".curation-layout>section", script)

@@ -178,10 +178,43 @@ function slideTransitionClass(direction) {
   return "";
 }
 
+function captureScrollState(selectors) {
+  return {
+    window: { x: window.scrollX, y: window.scrollY },
+    elements: selectors.map((selector) => ({
+      selector,
+      values: Array.from(document.querySelectorAll(selector)).map((el) => ({ left: el.scrollLeft, top: el.scrollTop })),
+    })),
+  };
+}
+
+function restoreScrollState(state) {
+  if (!state) return;
+  requestAnimationFrame(() => {
+    window.scrollTo(state.window.x, state.window.y);
+    state.elements.forEach((entry) => {
+      document.querySelectorAll(entry.selector).forEach((el, index) => {
+        const value = entry.values[index];
+        if (value) {
+          el.scrollLeft = value.left;
+          el.scrollTop = value.top;
+        }
+      });
+    });
+  });
+}
+
 function slideShell(slide, body) {
   const section = slide.section ? `<span class="slide-section">${esc(slide.section)}</span>` : "";
   const shouldAnimate = lastRenderedSlideId && lastRenderedSlideId !== slide.id && pendingSlideTransition !== "none";
   const transitionClass = shouldAnimate ? slideTransitionClass(pendingSlideTransition) : "";
+  const scrollState = lastRenderedSlideId === slide.id ? captureScrollState([
+    ".presentation-card",
+    ".interaction-slide",
+    ".curation-layout>section",
+    ".question-list",
+    ".bot-results-view",
+  ]) : null;
   app.innerHTML = `<div class="podium-shell presentation-shell template-${esc(slide.template || "standard")}${transitionClass}"><header class="presentation-top"><div class="slide-heading"><div class="brand-row">${brandMark()}${section}</div><h1>${esc(slide.title)}</h1></div><div class="join-box" aria-label="Join on your phone"><img class="qr-code" src="${esc(qrImageUrl())}" alt="QR code for participant app"><span class="join-caption">Scan to join</span></div></header>${body}<footer class="presentation-controls"><div class="presenter-nav"><button class="btn secondary" id="prev">Back</button><span class="slide-count">${selectedSlideIndex + 1}<i>/</i>${deckSlides.length}</span><button class="btn primary" id="next">Next</button></div><div class="presenter-tools"><button class="btn ghost" id="slide-list">Slide list</button><button class="btn ghost" id="edit-slide">Edit slide</button><button class="btn ghost" id="grid">Live grid</button><button class="btn ghost" id="reset">Reset</button></div></footer><div class="presenter-hint" aria-hidden="true">Controls</div></div>`;
   lastRenderedSlideId = slide.id;
   pendingSlideTransition = "none";
@@ -194,6 +227,7 @@ function slideShell(slide, body) {
     renderGrid();
   };
   document.querySelector("#reset").onclick = () => confirm("Wipe workshop data?") && api("/api/podium/reset", { method: "POST" }).then(load);
+  restoreScrollState(scrollState);
 }
 
 function renderSlideList() {
@@ -675,9 +709,11 @@ function renderDetail(runId) {
   const run = runId ? d.run_history.find((r) => r.id === runId) : d.latest_run;
   const instruction = run?.instruction_text || d.latest_instruction?.text || "No instruction yet";
   const transcript = run?.transcript || [];
+  const scrollState = runId ? null : captureScrollState([".pane"]);
   app.innerHTML = `<div class="podium-shell detail-shell"><header class="podium-header detail-header"><button class="btn secondary" id="back">Back</button>${progressionHeader(d.run_history)}</header><div class="detail"><section class="pane"><h2>Instruction <span class="badge">v${run?.version_number || d.latest_instruction?.version_number || "new"}</span></h2><div class="instruction">${esc(instruction)}</div><div class="history">${d.run_history.map((r) => `<button class="btn secondary ${run?.id === r.id ? "selected" : ""}" data-run="${r.id}">v${r.version_number} ${scoreText(r)}</button>`).join("")}</div></section><section class="pane"><h2>Conversation</h2><div class="chat">${chat(transcript)}</div>${scorePanel(run?.score)}</section></div></div>`;
   document.querySelector("#back").onclick = load;
   document.querySelectorAll("[data-run]").forEach((b) => (b.onclick = () => renderDetail(b.dataset.run)));
+  restoreScrollState(scrollState);
 }
 
 function progressionHeader(history) {
