@@ -18,6 +18,9 @@ let draggingSlideId = null;
 let lastRenderedSlideId = null;
 let pendingSlideTransition = "none";
 
+const SLIDE_ASSIGNEES = ["JS", "MC", "MH", "EW"];
+const SLIDE_DURATIONS = [5, 10, 15];
+
 const SLIDE_TEMPLATE_OPTIONS = [
   { value: "standard", label: "Standard slide", participantMode: "passive", podiumType: "slide" },
   { value: "interaction", label: "Assistant Builder slide", participantMode: "bot", podiumType: "activity", interaction: { placeholder: "Open the Assistant Builder on your phone." } },
@@ -232,7 +235,7 @@ function slideShell(slide, body) {
   restoreScrollState(scrollState);
 }
 
-function renderSlideList() {
+function renderSlideListLegacy() {
   closeSlideEditor();
   document.querySelector(".slide-list-panel")?.remove();
   const rows = deckSlides.map((slide, index) => {
@@ -256,6 +259,26 @@ function slideDropZone(index) {
 
 function closeSlideList() {
   document.querySelector(".slide-list-panel")?.remove();
+}
+
+function renderSlideList() {
+  closeSlideEditor();
+  document.querySelector(".slide-list-panel")?.remove();
+  const rows = deckSlides.map((slide, index) => {
+    const isLive = index === selectedSlideIndex;
+    return `${slideDropZone(index)}<article class="slide-row ${isLive ? "selected" : ""}" draggable="true" data-slide-id="${esc(slide.id)}"><span class="drag-handle" role="presentation">::</span>${slidePlanningControls(slide, index)}<button class="slide-row-main" draggable="false" data-go-slide="${index}"><strong>${index + 1}. ${esc(slide.title || "Untitled slide")}${isLive ? '<span class="live-slide-pill">Live</span>' : ""}</strong><small>${esc(slide.section || "slide")} · ${esc(slide.template || "standard")} · phone: ${esc(slide.participantMode || "passive")}</small></button><button class="btn secondary" draggable="false" data-edit-row="${index}">Edit</button></article>`;
+  }).join("") + slideDropZone(deckSlides.length);
+  document.body.insertAdjacentHTML("beforeend", `<aside class="slide-list-panel"><header><div><span class="eyebrow">Deck</span><h2>Slide list</h2></div><button type="button" class="icon-close" id="close-slide-list" aria-label="Close">x</button></header><div class="slide-list-actions"><button class="btn primary" id="new-slide">New slide</button><span>${deckPersisted ? "Saved in Railway" : "Using bundled deck"}</span></div><div class="slide-rows">${rows}</div></aside>`);
+  document.querySelector("#close-slide-list").onclick = closeSlideList;
+  document.querySelector("#new-slide").onclick = createBlankSlide;
+  document.querySelectorAll("[data-go-slide]").forEach((button) => (button.onclick = () => {
+    closeSlideList();
+    activateSlide(Number(button.dataset.goSlide));
+  }));
+  document.querySelectorAll("[data-edit-row]").forEach((button) => (button.onclick = () => openSlideEditor(effectiveSlide(deckSlides[Number(button.dataset.editRow)]))));
+  document.querySelectorAll("[data-slide-assignee]").forEach((select) => (select.onchange = () => saveSlidePlanning(Number(select.dataset.slideAssignee), { assignee: select.value })));
+  document.querySelectorAll("[data-slide-duration]").forEach((select) => (select.onchange = () => saveSlidePlanning(Number(select.dataset.slideDuration), { durationSeconds: Number(select.value) * 60 })));
+  bindSlideRows();
 }
 
 function bindSlideRows() {
@@ -331,6 +354,12 @@ async function persistCurrentDeck() {
   deckPersisted = true;
 }
 
+async function saveSlidePlanning(index, patch) {
+  if (!deckSlides[index]) return;
+  deckSlides = deckSlides.map((slide, slideIndex) => slideIndex === index ? { ...slide, ...patch } : slide);
+  await persistCurrentDeck();
+}
+
 async function saveSlideOrder() {
   await persistCurrentDeck();
   await api("/api/podium/slides/order", {
@@ -403,6 +432,19 @@ function optionHtml(options, selectedValue) {
     const label = typeof option === "string" ? option : option.label;
     return `<option value="${esc(value)}" ${value === selectedValue ? "selected" : ""}>${esc(label)}</option>`;
   }).join("");
+}
+
+function slideDurationMinutes(slide) {
+  const minutes = Number(slide.durationSeconds) / 60;
+  return SLIDE_DURATIONS.includes(minutes) ? minutes : 10;
+}
+
+function slidePlanningControls(slide, index) {
+  const assignee = slide.assignee || SLIDE_ASSIGNEES[0];
+  const minutes = slideDurationMinutes(slide);
+  const assigneeOptions = SLIDE_ASSIGNEES.map((initials) => `<option value="${initials}" ${initials === assignee ? "selected" : ""}>${initials}</option>`).join("");
+  const durationOptions = SLIDE_DURATIONS.map((value) => `<option value="${value}" ${value === minutes ? "selected" : ""}>${value}m</option>`).join("");
+  return `<select class="slide-meta-select slide-assignee-select" draggable="false" data-slide-assignee="${index}" aria-label="Slide assignee">${assigneeOptions}</select><select class="slide-meta-select slide-duration-select" draggable="false" data-slide-duration="${index}" aria-label="Slide duration">${durationOptions}</select>`;
 }
 
 function openSlideEditor(slide) {

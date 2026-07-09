@@ -225,7 +225,7 @@ textarea.short{min-height:130px}
 .slide-drop-zone::before{content:"";position:absolute;left:44px;right:12px;top:50%;height:2px;background:#344464;opacity:.35;transform:translateY(-50%);border-radius:999px;transition:height .16s ease,background .16s ease,opacity .16s ease}
 .slide-drop-zone.drop-target{height:28px;background:#00a6c51a}
 .slide-drop-zone.drop-target::before{height:4px;background:var(--brand-teal);opacity:1}
-.slide-row{display:grid;grid-template-columns:34px 44px minmax(0,1fr) auto;gap:10px;align-items:center;background:#101b35;border:1px solid #344464;border-radius:8px;padding:10px;cursor:grab;transition:background .16s ease,border-color .16s ease,box-shadow .16s ease,opacity .16s ease,transform .16s ease}
+.slide-row{display:grid;grid-template-columns:34px 72px 86px minmax(0,1fr) auto;gap:10px;align-items:center;background:#101b35;border:1px solid #344464;border-radius:8px;padding:10px;cursor:grab;transition:background .16s ease,border-color .16s ease,box-shadow .16s ease,opacity .16s ease,transform .16s ease}
 .slide-row:active{cursor:grabbing}
 .slide-row.dragging{opacity:.48;transform:scale(.992)}
 .slide-row.selected{border-color:var(--brand-mint);box-shadow:0 0 0 3px #89c8a244}
@@ -233,6 +233,8 @@ textarea.short{min-height:130px}
 .drag-handle:focus-visible{outline:3px solid #00a6c555;outline-offset:2px}
 .quick-nav-arrow{display:grid;place-items:center;width:44px;height:44px;border:1px solid #3a4968;border-radius:999px;background:#263554;color:white;font-weight:900;cursor:pointer}
 .quick-nav-arrow:hover{background:var(--brand-teal);border-color:var(--brand-teal)}
+.slide-meta-select{width:100%;min-height:44px;margin:0;background:#263554;color:white;border:1px solid #3a4968;border-radius:999px;padding:8px 10px;font-size:14px;font-weight:900;cursor:pointer}
+.slide-meta-select:focus{outline:3px solid #00a6c555;border-color:var(--brand-teal)}
 .slide-row-main{border:0;background:transparent;color:white;text-align:left;padding:4px;cursor:pointer;min-width:0}
 .slide-row-main strong{display:block;font-size:18px;line-height:1.15;overflow-wrap:anywhere}
 .slide-row-main small{display:block;color:#cbd5e1;font-weight:800;margin-top:4px}
