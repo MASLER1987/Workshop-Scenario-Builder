@@ -19,14 +19,34 @@ let lastRenderedSlideId = null;
 let pendingSlideTransition = "none";
 let slideTimerInterval = null;
 let slideTimerStarts = loadSlideTimerStarts();
+let resultsPage = 0;
 let pendingSlideImage = null;
 let pendingSlideImageFile = null;
 let pendingSlideImagePreviewUrl = "";
+let slideEditorDirty = false;
 
 const SLIDE_ASSIGNEES = ["JS", "MC", "MH", "EW"];
 const SLIDE_DURATIONS = [5, 10, 15];
 const SLIDE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SLIDE_IMAGE_BYTES = 5 * 1024 * 1024;
+const TEMPLATE_EDITOR_FIELDS = {
+  standard: ["body", "bullets", "image"],
+  interaction: ["body", "bullets", "phonePrompt"],
+  "bot-results": [],
+  "qna-review": ["body"],
+  "suggestion-capture": ["body", "phonePrompt"],
+  "requirements-capture": ["body", "phonePrompt"],
+  "workflow-capture": ["body", "phonePrompt"],
+};
+const PARTICIPANT_MODE_LABELS = {
+  passive: "Follow the presentation",
+  bot: "Assistant Builder",
+  results: "Latest bot result",
+  qna: "Q&A",
+  suggestion: "Suggestion input",
+  requirements: "Requirements input",
+  process: "Process input and voting",
+};
 
 const SLIDE_TEMPLATE_OPTIONS = [
   { value: "standard", label: "Standard slide", participantMode: "passive", podiumType: "slide" },
@@ -87,7 +107,20 @@ async function loadSlideOverrides() {
 async function loadSlideDeck() {
   const rows = await api("/api/podium/slides");
   deckPersisted = rows.length > 0;
-  deckSlides = deckPersisted ? rows.map((row) => row.payload || {}) : PRESENTATION_SLIDES;
+  const slides = deckPersisted ? rows.map((row) => row.payload || {}) : PRESENTATION_SLIDES;
+  deckSlides = slides.map(normaliseSlidePlanning);
+}
+
+function normaliseSlidePlanning(slide) {
+  const minutes = Math.max(0, Number(slide.durationSeconds) / 60 || 0);
+  const duration = minutes > 10
+    ? 15
+    : SLIDE_DURATIONS.reduce((nearest, value) => Math.abs(value - minutes) < Math.abs(nearest - minutes) ? value : nearest, SLIDE_DURATIONS[0]);
+  return {
+    ...slide,
+    assignee: SLIDE_ASSIGNEES.includes(slide.assignee) ? slide.assignee : SLIDE_ASSIGNEES[0],
+    durationSeconds: duration * 60,
+  };
 }
 
 function baseSlide() {
@@ -314,7 +347,6 @@ function restoreScrollState(state) {
 }
 
 function slideShell(slide, body) {
-  const section = slide.section ? `<span class="slide-section">${esc(slide.section)}</span>` : "";
   const shouldAnimate = lastRenderedSlideId && lastRenderedSlideId !== slide.id && pendingSlideTransition !== "none";
   const transitionClass = shouldAnimate ? slideTransitionClass(pendingSlideTransition) : "";
   const scrollState = lastRenderedSlideId === slide.id ? captureScrollState([
@@ -324,7 +356,7 @@ function slideShell(slide, body) {
     ".question-list",
     ".bot-results-view",
   ]) : null;
-  app.innerHTML = `<div class="podium-shell presentation-shell template-${esc(slide.template || "standard")}${transitionClass}"><header class="presentation-top"><div class="slide-heading"><div class="brand-row">${brandMark()}${section}</div><h1>${slideNumberBadge(slide)}<span class="slide-title-text">${esc(slide.title)}</span></h1></div><div class="join-box" aria-label="Join on your phone"><img class="qr-code" src="${esc(qrImageUrl())}" alt="QR code for participant app"><span class="join-caption">Scan to join</span></div></header>${body}<footer class="presentation-controls"><div class="presenter-nav"><button class="btn secondary" id="prev">Back</button><span class="slide-count">${selectedSlideIndex + 1}<i>/</i>${deckSlides.length}</span><button class="btn primary" id="next">Next</button></div><div class="presenter-tools"><button class="btn ghost" id="slide-list">Slide list</button><button class="btn ghost" id="edit-slide">Edit slide</button><button class="btn ghost" id="grid">Live grid</button><button class="btn ghost" id="reset">Reset</button></div></footer>${slideTimerHtml(slide)}<div class="presenter-hint" aria-hidden="true">Controls</div></div>`;
+  app.innerHTML = `<div class="podium-shell presentation-shell template-${esc(slide.template || "standard")}${transitionClass}"><div class="vwv-slide-rail" aria-hidden="true"><i></i><i></i><i></i></div><header class="presentation-top"><div class="slide-heading"><div class="brand-row">${brandMark()}</div><h1>${slideNumberBadge(slide)}<span class="slide-title-text">${esc(slide.title)}</span></h1></div><div class="join-box" aria-label="Join on your phone"><img class="qr-code" src="${esc(qrImageUrl())}" alt="QR code for participant app"><span class="join-caption">Scan to join</span></div></header>${body}<footer class="presentation-controls"><div class="presenter-nav"><button class="btn secondary" id="prev">Back</button><span class="slide-count">${selectedSlideIndex + 1}<i>/</i>${deckSlides.length}</span><button class="btn primary" id="next">Next</button></div><div class="presenter-tools"><button class="btn ghost" id="slide-list">Slide list</button><button class="btn ghost" id="edit-slide">Edit slide</button><button class="btn ghost" id="grid">Live grid</button><button class="btn ghost" id="reset">Reset</button></div></footer>${slideTimerHtml(slide)}<div class="presenter-hint" aria-hidden="true">Controls</div></div>`;
   lastRenderedSlideId = slide.id;
   pendingSlideTransition = "none";
   document.querySelector("#prev").onclick = () => activateSlide(selectedSlideIndex - 1);
@@ -344,24 +376,6 @@ function slideShell(slide, body) {
   startSlideTimer();
 }
 
-function renderSlideListLegacy() {
-  closeSlideEditor();
-  document.querySelector(".slide-list-panel")?.remove();
-  const rows = deckSlides.map((slide, index) => {
-    const isLive = index === selectedSlideIndex;
-    return `${slideDropZone(index)}<article class="slide-row ${isLive ? "selected" : ""}" draggable="true" data-slide-id="${esc(slide.id)}"><span class="drag-handle" role="presentation">::</span><button class="quick-nav-arrow" draggable="false" data-go-slide="${index}" aria-label="Go to slide ${index + 1}">-></button><button class="slide-row-main" draggable="false" data-go-slide="${index}"><strong>${index + 1}. ${esc(slide.title || "Untitled slide")}${isLive ? '<span class="live-slide-pill">Live</span>' : ""}</strong><small>${esc(slide.section || "slide")} · ${esc(slide.template || "standard")} · phone: ${esc(slide.participantMode || "passive")}</small></button><button class="btn secondary" draggable="false" data-edit-row="${index}">Edit</button></article>`;
-  }).join("") + slideDropZone(deckSlides.length);
-  document.body.insertAdjacentHTML("beforeend", `<aside class="slide-list-panel"><header><div><span class="eyebrow">Deck</span><h2>Slide list</h2></div><button type="button" class="icon-close" id="close-slide-list" aria-label="Close">x</button></header><div class="slide-list-actions"><button class="btn primary" id="new-slide">New slide</button><span>${deckPersisted ? "Saved in Railway" : "Using bundled deck"}</span></div><div class="slide-rows">${rows}</div></aside>`);
-  document.querySelector("#close-slide-list").onclick = closeSlideList;
-  document.querySelector("#new-slide").onclick = createBlankSlide;
-  document.querySelectorAll("[data-go-slide]").forEach((button) => (button.onclick = () => {
-    closeSlideList();
-    activateSlide(Number(button.dataset.goSlide));
-  }));
-  document.querySelectorAll("[data-edit-row]").forEach((button) => (button.onclick = () => openSlideEditor(effectiveSlide(deckSlides[Number(button.dataset.editRow)]))));
-  bindSlideRows();
-}
-
 function slideDropZone(index) {
   return `<div class="slide-drop-zone" data-drop-index="${index}" aria-hidden="true"></div>`;
 }
@@ -371,13 +385,14 @@ function closeSlideList() {
 }
 
 function renderSlideList() {
-  closeSlideEditor();
+  if (!closeSlideEditor()) return;
   document.querySelector(".slide-list-panel")?.remove();
   const rows = deckSlides.map((slide, index) => {
     const isLive = index === selectedSlideIndex;
-    return `${slideDropZone(index)}<article class="slide-row ${isLive ? "selected" : ""}" draggable="true" data-slide-id="${esc(slide.id)}"><span class="drag-handle" role="presentation">::</span>${slidePlanningControls(slide, index)}<button class="slide-row-main" draggable="false" data-go-slide="${index}"><strong>${index + 1}. ${esc(slide.title || "Untitled slide")}${isLive ? '<span class="live-slide-pill">Live</span>' : ""}</strong><small>${esc(slide.section || "slide")} · ${esc(slide.template || "standard")} · phone: ${esc(slide.participantMode || "passive")}</small></button><button class="btn secondary" draggable="false" data-edit-row="${index}">Edit</button></article>`;
+    const effective = effectiveSlide(slide);
+    return `${slideDropZone(index)}<article class="slide-row ${isLive ? "selected" : ""}" draggable="true" data-slide-id="${esc(slide.id)}"><span class="drag-handle" role="presentation">::</span>${slidePlanningControls(effective, index)}<button class="slide-row-main" draggable="false" data-go-slide="${index}"><strong>${index + 1}. ${esc(effective.title || "Untitled slide")}${isLive ? '<span class="live-slide-pill">Live</span>' : ""}</strong><small>${esc(slideTemplateLabel(effective.template))} &middot; ${esc(PARTICIPANT_MODE_LABELS[effective.participantMode] || effective.participantMode || "Follow the presentation")}</small></button><button class="btn secondary" draggable="false" data-edit-row="${index}">Edit</button></article>`;
   }).join("") + slideDropZone(deckSlides.length);
-  document.body.insertAdjacentHTML("beforeend", `<aside class="slide-list-panel"><header><div><span class="eyebrow">Deck</span><h2>Slide list</h2></div><button type="button" class="icon-close" id="close-slide-list" aria-label="Close">x</button></header><div class="slide-list-actions"><button class="btn primary" id="new-slide">New slide</button><span>${deckPersisted ? "Saved in Railway" : "Using bundled deck"}</span></div><div class="slide-rows">${rows}</div></aside>`);
+  document.body.insertAdjacentHTML("beforeend", `<aside class="slide-list-panel"><header><div><span class="eyebrow">Deck</span><h2>Slide list</h2></div><button type="button" class="icon-close" id="close-slide-list" aria-label="Close">x</button></header><div class="slide-list-actions"><button class="btn primary" id="new-slide">New slide</button><span id="deck-save-status">${deckPersisted ? "Saved in Railway" : "Using bundled deck"}</span></div><p class="slide-list-help">Drag a row, or use Alt + Up/Down when it has keyboard focus.</p><div class="slide-list-columns" aria-hidden="true"><span></span><span>Owner</span><span>Time</span><span>Slide</span><span></span></div><div class="slide-rows" role="list">${rows}</div></aside>`);
   document.querySelector("#close-slide-list").onclick = closeSlideList;
   document.querySelector("#new-slide").onclick = createBlankSlide;
   document.querySelectorAll("[data-go-slide]").forEach((button) => (button.onclick = () => {
@@ -399,6 +414,14 @@ function bindSlideRows() {
       row.classList.add("dragging");
     };
     row.ondragend = clearSlideDragState;
+    row.tabIndex = 0;
+    row.setAttribute("role", "listitem");
+    row.onkeydown = (event) => {
+      if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+      event.preventDefault();
+      const index = deckSlides.findIndex((slide) => slide.id === row.dataset.slideId);
+      reorderSlideToIndex(row.dataset.slideId, event.key === "ArrowUp" ? index - 1 : index + 2);
+    };
   });
   document.querySelectorAll(".slide-drop-zone[data-drop-index]").forEach((zone) => {
     zone.ondragenter = (event) => {
@@ -466,7 +489,14 @@ async function persistCurrentDeck() {
 async function saveSlidePlanning(index, patch) {
   if (!deckSlides[index]) return;
   deckSlides = deckSlides.map((slide, slideIndex) => slideIndex === index ? { ...slide, ...patch } : slide);
-  await persistCurrentDeck();
+  const status = document.querySelector("#deck-save-status");
+  if (status) status.textContent = "Saving...";
+  try {
+    await persistCurrentDeck();
+    if (status) status.textContent = "Saved in Railway";
+  } catch (error) {
+    if (status) status.textContent = "Save failed - try again";
+  }
 }
 
 async function saveSlideOrder() {
@@ -520,7 +550,8 @@ function blankSlidePayload() {
     ...templateDefaults("standard"),
     body: "",
     bullets: [],
-    durationSeconds: 180,
+    assignee: SLIDE_ASSIGNEES[0],
+    durationSeconds: 300,
   };
 }
 
@@ -543,9 +574,12 @@ function optionHtml(options, selectedValue) {
   }).join("");
 }
 
+function slideTemplateLabel(template) {
+  return SLIDE_TEMPLATE_OPTIONS.find((option) => option.value === template)?.label || "Standard slide";
+}
+
 function slideDurationMinutes(slide) {
-  const minutes = Number(slide.durationSeconds) / 60;
-  return SLIDE_DURATIONS.includes(minutes) ? minutes : 10;
+  return normaliseSlidePlanning(slide).durationSeconds / 60;
 }
 
 function slidePlanningControls(slide, index) {
@@ -558,13 +592,14 @@ function slidePlanningControls(slide, index) {
 
 function openSlideEditor(slide) {
   const existing = document.querySelector(".edit-slide-panel");
-  if (existing) existing.remove();
+  if (existing && !closeSlideEditor()) return;
   pendingSlideImage = normaliseSlideImage(slide.image);
   pendingSlideImageFile = null;
   revokeSlideImagePreview();
+  slideEditorDirty = false;
   const bullets = (slide.bullets || []).join("\n");
   const placeholder = slide.template === "interaction" ? interactionPromptText(slide) : slide.interaction?.placeholder || "";
-  document.body.insertAdjacentHTML("beforeend", `<aside class="edit-slide-panel"><form id="slide-edit-form"><header><div><span class="eyebrow">Slide editor</span><h2>${esc(slide.title)}</h2></div><button type="button" class="icon-close" id="close-editor" aria-label="Close">x</button></header><label>Template<select id="edit-template">${optionHtml(SLIDE_TEMPLATE_OPTIONS, slide.template || "standard")}</select></label><label>Phone mode<select id="edit-participant-mode">${optionHtml(PARTICIPANT_MODE_OPTIONS, slide.participantMode || "passive")}</select></label><label>Section<input id="edit-section" maxlength="80" value="${esc(slide.section || "")}"></label><label>Title<input id="edit-title" maxlength="140" value="${esc(slide.title || "")}"></label><label>Body<textarea id="edit-body" rows="6">${esc(slide.body || "")}</textarea></label><label>Bullets<textarea id="edit-bullets" rows="5" placeholder="One bullet per line">${esc(bullets)}</textarea></label>${slideImageEditorHtml()}<label>Phone prompt<textarea id="edit-placeholder" rows="3">${esc(placeholder)}</textarea></label><div class="edit-slide-actions"><button type="button" class="btn danger" id="delete-slide">Delete slide</button><button type="button" class="btn secondary" id="reset-slide-override">Reset default</button><button type="button" class="btn secondary" id="cancel-slide-edit">Cancel</button><button type="submit" class="btn primary">Save</button></div></form></aside>`);
+  document.body.insertAdjacentHTML("beforeend", `<aside class="edit-slide-panel"><form id="slide-edit-form"><header><div><span class="eyebrow">Slide editor</span><h2>${esc(slide.title)}</h2></div><button type="button" class="icon-close" id="close-editor" aria-label="Close">x</button></header><section class="slide-editor-preview" aria-label="Content preview"><div class="editor-slide-preview"><span id="preview-slide-label">Projected slide</span><strong id="preview-slide-title"></strong><p id="preview-slide-layout" class="preview-layout-hint"></p><p id="preview-slide-body"></p><ul id="preview-slide-bullets"></ul><div id="preview-slide-image" class="preview-slide-image"></div></div><div class="editor-phone-preview"><span>Phone</span><strong id="preview-phone-mode"></strong><p id="preview-phone-prompt"></p></div></section><label>Template<select id="edit-template">${optionHtml(SLIDE_TEMPLATE_OPTIONS, slide.template || "standard")}</select></label><div class="editor-mode-note"><span>Phone experience</span><strong id="edit-participant-mode-label"></strong><input type="hidden" id="edit-participant-mode" value="${esc(slide.participantMode || "passive")}"></div><label>Section<input id="edit-section" maxlength="80" value="${esc(slide.section || "")}"></label><label>Title<input id="edit-title" maxlength="140" value="${esc(slide.title || "")}"></label><label data-editor-field="body">Body<textarea id="edit-body" rows="6">${esc(slide.body || "")}</textarea></label><label data-editor-field="bullets">Bullets<textarea id="edit-bullets" rows="5" placeholder="One bullet per line">${esc(bullets)}</textarea></label>${slideImageEditorHtml()}<label data-editor-field="phonePrompt">Phone prompt<textarea id="edit-placeholder" rows="3">${esc(placeholder)}</textarea></label><p class="editor-fit-warning" id="editor-fit-warning" aria-live="polite"></p><div class="edit-slide-actions"><button type="button" class="btn danger" id="delete-slide">Delete slide</button><button type="button" class="btn secondary" id="reset-slide-override">Reset default</button><button type="button" class="btn secondary" id="cancel-slide-edit">Cancel</button><button type="submit" class="btn primary" id="save-slide">Save</button></div></form></aside>`);
   document.querySelector("#close-editor").onclick = closeSlideEditor;
   document.querySelector("#cancel-slide-edit").onclick = closeSlideEditor;
   document.querySelector("#reset-slide-override").onclick = () => resetSlideOverride(slide.id);
@@ -575,27 +610,100 @@ function openSlideEditor(slide) {
     revokeSlideImagePreview();
     pendingSlideImage = null;
     updateSlideImageEditor();
+    markSlideEditorDirty();
+    updateSlideEditorPreview();
   };
-  syncSlideImageAvailability();
   document.querySelector("#edit-template").onchange = (event) => {
     const defaults = templateDefaults(event.target.value);
     document.querySelector("#edit-participant-mode").value = defaults.participantMode;
-    syncSlideImageAvailability();
     if (defaults.interaction && !document.querySelector("#edit-placeholder").value.trim()) {
       document.querySelector("#edit-placeholder").value = defaults.interaction.placeholder || "";
     }
+    syncEditorFields();
+    markSlideEditorDirty();
+    updateSlideEditorPreview();
   };
-  document.querySelector("#slide-edit-form").onsubmit = (event) => {
+  const form = document.querySelector("#slide-edit-form");
+  form.addEventListener("input", () => {
+    markSlideEditorDirty();
+    updateSlideEditorPreview();
+  });
+  form.onsubmit = (event) => {
     event.preventDefault();
     saveSlideOverride(slide);
   };
+  syncEditorFields();
+  updateSlideEditorPreview();
 }
 
-function closeSlideEditor() {
-  document.querySelector(".edit-slide-panel")?.remove();
+function closeSlideEditor(force = false) {
+  const editor = document.querySelector(".edit-slide-panel");
+  if (!editor) return true;
+  if (!force && slideEditorDirty && !confirm("Discard unsaved slide changes?")) return false;
+  editor.remove();
   revokeSlideImagePreview();
   pendingSlideImage = null;
   pendingSlideImageFile = null;
+  slideEditorDirty = false;
+  return true;
+}
+
+function markSlideEditorDirty() {
+  slideEditorDirty = true;
+}
+
+function syncEditorFields() {
+  const template = document.querySelector("#edit-template")?.value || "standard";
+  const fields = new Set(TEMPLATE_EDITOR_FIELDS[template] || []);
+  document.querySelectorAll("[data-editor-field]").forEach((field) => {
+    field.hidden = !fields.has(field.dataset.editorField);
+  });
+  const defaults = templateDefaults(template);
+  const mode = document.querySelector("#edit-participant-mode");
+  const modeLabel = document.querySelector("#edit-participant-mode-label");
+  if (mode) mode.value = defaults.participantMode;
+  if (modeLabel) modeLabel.textContent = PARTICIPANT_MODE_LABELS[defaults.participantMode] || defaults.participantMode;
+}
+
+function updateSlideEditorPreview() {
+  const template = document.querySelector("#edit-template")?.value || "standard";
+  const fields = new Set(TEMPLATE_EDITOR_FIELDS[template] || []);
+  const title = document.querySelector("#edit-title")?.value.trim() || "Untitled slide";
+  const body = fields.has("body") ? document.querySelector("#edit-body")?.value.trim() || "" : "";
+  const bullets = fields.has("bullets") ? (document.querySelector("#edit-bullets")?.value || "").split("\n").map((item) => item.trim()).filter(Boolean) : [];
+  const mode = document.querySelector("#edit-participant-mode")?.value || templateDefaults(template).participantMode;
+  const prompt = fields.has("phonePrompt") ? document.querySelector("#edit-placeholder")?.value.trim() || PARTICIPANT_MODE_LABELS[mode] : PARTICIPANT_MODE_LABELS[mode] || "Follow the presentation";
+  const titleNode = document.querySelector("#preview-slide-title");
+  const labelNode = document.querySelector("#preview-slide-label");
+  const layoutNode = document.querySelector("#preview-slide-layout");
+  const bodyNode = document.querySelector("#preview-slide-body");
+  const bulletsNode = document.querySelector("#preview-slide-bullets");
+  const imageNode = document.querySelector("#preview-slide-image");
+  const modeNode = document.querySelector("#preview-phone-mode");
+  const promptNode = document.querySelector("#preview-phone-prompt");
+  if (titleNode) titleNode.textContent = title;
+  if (labelNode) labelNode.textContent = slideTemplateLabel(template);
+  if (layoutNode) layoutNode.textContent = previewTemplateHint(template);
+  if (bodyNode) bodyNode.textContent = body;
+  if (bulletsNode) bulletsNode.innerHTML = bullets.slice(0, 5).map((item) => `<li>${esc(item)}</li>`).join("");
+  if (imageNode) imageNode.innerHTML = template === "standard" && pendingSlideImage ? `<img src="${esc(slideImageSource(pendingSlideImage))}" alt="">` : "";
+  if (modeNode) modeNode.textContent = PARTICIPANT_MODE_LABELS[mode] || mode;
+  if (promptNode) promptNode.textContent = prompt;
+  const warning = document.querySelector("#editor-fit-warning");
+  const mayOverflow = title.length > 85 || body.length > 320 || bullets.length > 5 || bullets.some((item) => item.length > 95);
+  if (warning) warning.textContent = mayOverflow ? "This content may not fit comfortably on a projected slide. Shorten the title, body, or list." : "";
+}
+
+function previewTemplateHint(template) {
+  return {
+    standard: "Title, copy and optional list or image",
+    interaction: "Task instructions, live participation counts and phone task",
+    "bot-results": "Live class scores with paged participant results",
+    "qna-review": "Open-question count and question review list",
+    "suggestion-capture": "Incoming suggestions and a curated discussion list",
+    "requirements-capture": "Incoming ideas and captured bot requirements",
+    "workflow-capture": "Stage suggestions and the process board",
+  }[template] || "Presentation content";
 }
 
 function normaliseSlideImage(image) {
@@ -616,13 +724,11 @@ function slideImageEditorHtml(message = "") {
   const preview = pendingSlideImage
     ? `<img src="${esc(slideImageSource(pendingSlideImage))}" alt="${esc(pendingSlideImage.name || "Selected slide image")}">`
     : '<span>No image selected</span>';
-  return `<fieldset class="slide-image-field" id="slide-image-field"><legend>Slide image</legend><div class="slide-image-preview" id="slide-image-preview">${preview}</div><div class="slide-image-controls"><label class="slide-image-upload" for="edit-slide-image">Choose image<input id="edit-slide-image" type="file" accept="image/jpeg,image/png,image/webp"></label><button type="button" class="btn secondary" id="remove-slide-image" ${pendingSlideImage ? "" : "disabled"}>Remove</button></div><p class="slide-image-help">JPEG, PNG or WebP up to 5 MB. The image sits beside bullets or spans the slide when there are no bullets.</p><p class="slide-image-message" id="slide-image-message" aria-live="polite">${esc(message)}</p></fieldset>`;
+  return `<fieldset class="slide-image-field" id="slide-image-field" data-editor-field="image"><legend>Slide image</legend><div class="slide-image-preview" id="slide-image-preview">${preview}</div><div class="slide-image-controls"><label class="slide-image-upload" for="edit-slide-image">Choose image<input id="edit-slide-image" type="file" accept="image/jpeg,image/png,image/webp"></label><button type="button" class="btn secondary" id="remove-slide-image" ${pendingSlideImage ? "" : "disabled"}>Remove</button></div><p class="slide-image-help">JPEG, PNG or WebP up to 5 MB. The image sits beside bullets or spans the slide when there are no bullets.</p><p class="slide-image-message" id="slide-image-message" aria-live="polite">${esc(message)}</p></fieldset>`;
 }
 
 function syncSlideImageAvailability() {
-  const field = document.querySelector("#slide-image-field");
-  const template = document.querySelector("#edit-template");
-  if (field && template) field.hidden = template.value !== "standard";
+  syncEditorFields();
 }
 
 function updateSlideImageEditor(message = "") {
@@ -659,6 +765,8 @@ async function handleSlideImageSelection(event) {
     pendingSlideImageFile = file;
     pendingSlideImage = { src: pendingSlideImagePreviewUrl, name: file.name, type: file.type };
     updateSlideImageEditor(`${file.name} ready to save.`);
+    markSlideEditorDirty();
+    updateSlideEditorPreview();
   } catch (error) {
     event.target.value = "";
     updateSlideImageEditor(error.message);
@@ -677,6 +785,12 @@ async function uploadSlideImage(slideId, file) {
 }
 
 async function saveSlideOverride(slide) {
+  const saveButton = document.querySelector("#save-slide");
+  if (saveButton) {
+    saveButton.disabled = true;
+    saveButton.textContent = "Saving...";
+  }
+  try {
   const bulletLines = document.querySelector("#edit-bullets").value.split("\n").map((line) => line.trim()).filter(Boolean);
   const template = document.querySelector("#edit-template").value;
   const defaults = templateDefaults(template);
@@ -715,8 +829,17 @@ async function saveSlideOverride(slide) {
     });
     presentationState = await api("/api/podium/presentation");
   }
-  closeSlideEditor();
+  slideEditorDirty = false;
+  closeSlideEditor(true);
   renderPresentation();
+  } catch (error) {
+    if (saveButton) {
+      saveButton.disabled = false;
+      saveButton.textContent = "Save";
+    }
+    const warning = document.querySelector("#editor-fit-warning");
+    if (warning) warning.textContent = "Slide not saved. Check the connection and try again.";
+  }
 }
 
 async function resetSlideOverride(slideId) {
@@ -730,7 +853,7 @@ async function resetSlideOverride(slideId) {
     deckSlides = deckSlides.map((item) => item.id === slideId ? { ...item, image: null } : item);
   }
   if (deckPersisted) await persistCurrentDeck();
-  closeSlideEditor();
+  closeSlideEditor(true);
   renderPresentation();
 }
 
@@ -760,7 +883,7 @@ async function deleteSlide(slideId) {
   } else {
     selectedSlideIndex = Math.max(0, deckSlides.findIndex((slide) => slide.id === activeId));
   }
-  closeSlideEditor();
+  closeSlideEditor(true);
   closeSlideList();
   await activateSlide(selectedSlideIndex);
 }
@@ -789,12 +912,38 @@ function renderInteractionSlide(slide) {
 }
 
 function renderLiveSlide(slide) {
-  slideShell(slide, `<section class="bot-results-view">${summaryStrip()}<div class="sortbar"><button class="btn ${sortMode === "leaderboard" ? "primary" : "secondary"}" data-sort="leaderboard">Leaderboard</button><button class="btn ${sortMode === "improved" ? "primary" : "secondary"}" data-sort="improved">Most improved</button></div><section class="grid">${sortedSessions().map(card).join("")}</section></section>`);
-  document.querySelectorAll(".card").forEach((c) => (c.onclick = () => openDetail(c.dataset.id)));
+  const page = pagedResultSessions();
+  slideShell(slide, `<section class="bot-results-view">${summaryStrip()}<div class="results-toolbar"><div class="sortbar"><button class="btn ${sortMode === "leaderboard" ? "primary" : "secondary"}" data-sort="leaderboard">Leaderboard</button><button class="btn ${sortMode === "improved" ? "primary" : "secondary"}" data-sort="improved">Most improved</button></div>${resultsPager(page)}</div><section class="grid results-grid">${page.rows.map(card).join("") || '<p class="muted results-empty">Waiting for the first completed run.</p>'}</section></section>`);
+  bindSessionCards();
   document.querySelectorAll("[data-sort]").forEach((b) => (b.onclick = () => {
     sortMode = b.dataset.sort;
+    resultsPage = 0;
     renderPresentation();
   }));
+  document.querySelectorAll("[data-results-page]").forEach((button) => (button.onclick = () => {
+    resultsPage = Number(button.dataset.resultsPage);
+    renderPresentation();
+  }));
+}
+
+function resultPageSize() {
+  if (window.innerWidth >= 1500) return 8;
+  if (window.innerWidth >= 1100) return 6;
+  return 4;
+}
+
+function pagedResultSessions() {
+  const allRows = sortedSessions();
+  const pageSize = resultPageSize();
+  const pageCount = Math.max(1, Math.ceil(allRows.length / pageSize));
+  resultsPage = Math.max(0, Math.min(resultsPage, pageCount - 1));
+  const start = resultsPage * pageSize;
+  return { rows: allRows.slice(start, start + pageSize), pageCount, page: resultsPage, total: allRows.length };
+}
+
+function resultsPager(page) {
+  if (page.pageCount <= 1) return `<span class="results-page-count">${page.total} participant${page.total === 1 ? "" : "s"}</span>`;
+  return `<nav class="results-pager" aria-label="Results pages"><button class="btn secondary" data-results-page="${page.page - 1}" ${page.page === 0 ? "disabled" : ""} aria-label="Previous results page">Previous</button><span class="results-page-count">${page.page + 1} / ${page.pageCount}</span><button class="btn secondary" data-results-page="${page.page + 1}" ${page.page >= page.pageCount - 1 ? "disabled" : ""} aria-label="Next results page">Next</button></nav>`;
 }
 
 function questionSlideLabel(question) {
@@ -831,10 +980,11 @@ function renderRequirementsSlide(slide) {
   const capturedHtml = captured.map((item, index) => `<li><span>${esc(item.text || item)}</span><button class="req-remove" data-remove-req="${index}" aria-label="Remove requirement">Remove</button></li>`).join("");
   const incomingCount = availableResponses.length ? ` <span class="count-pill">${availableResponses.length}</span>` : "";
   const capturedCount = captured.length ? ` <span class="count-pill">${captured.length}</span>` : "";
+  const prompt = slide.body ? `<p class="curation-prompt">${esc(slide.body)}</p>` : "";
   const capturedBody = captured.length
     ? `<ol id="captured-list" class="captured-list">${capturedHtml}</ol><p class="muted curation-foot">These become the phone brief for the second bot round.</p>`
     : `<p class="muted empty-hint">Nothing captured yet. Drag an idea across, or hit Capture — your picks become the phone brief for round two.</p>`;
-  slideShell(slide, `<div class="curation-layout"><section class="incoming-col"><h2>Incoming ideas${incomingCount}</h2><div class="idea-pool requirements-idea-pool">${incoming || '<p class="muted empty-hint">No ideas yet — they appear here as students send them.</p>'}</div></section><section class="captured-requirements" data-requirements-drop="true"><h2>Captured requirements${capturedCount}</h2>${capturedBody}</section></div>`);
+  slideShell(slide, `<div class="curation-layout"><section class="incoming-col"><h2>Incoming ideas${incomingCount}</h2>${prompt}<div class="idea-pool requirements-idea-pool">${incoming || '<p class="muted empty-hint">No ideas yet — they appear here as students send them.</p>'}</div></section><section class="captured-requirements" data-requirements-drop="true"><h2>Captured requirements${capturedCount}</h2>${capturedBody}</section></div>`);
   document.querySelectorAll("[data-capture]").forEach((button) => (button.onclick = () => captureRequirementResponse(slide.id, button.dataset.capture)));
   document.querySelectorAll("[data-remove-req]").forEach((button) => (button.onclick = () => {
     const next = captured.filter((_, index) => index !== Number(button.dataset.removeReq));
@@ -881,10 +1031,11 @@ function renderSuggestionSlide(slide) {
   const capturedHtml = captured.map((item, index) => `<li><span>${esc(item.text || item)}</span><button class="req-remove" data-remove-suggestion="${index}" aria-label="Remove suggestion">Remove</button></li>`).join("");
   const incomingCount = availableResponses.length ? ` <span class="count-pill">${availableResponses.length}</span>` : "";
   const capturedCount = captured.length ? ` <span class="count-pill">${captured.length}</span>` : "";
+  const prompt = slide.body ? `<p class="curation-prompt">${esc(slide.body)}</p>` : "";
   const capturedBody = captured.length
     ? `<ol id="captured-suggestion-list" class="captured-list">${capturedHtml}</ol><p class="muted curation-foot">Captured here for discussion only. These do not change the Assistant Builder brief.</p>`
     : `<p class="muted empty-hint">Nothing captured yet. Drag an idea across, or hit Capture to build a discussion list.</p>`;
-  slideShell(slide, `<div class="curation-layout suggestion-capture"><section class="incoming-col"><h2>Incoming suggestions${incomingCount}</h2><div class="idea-pool requirements-idea-pool">${incoming || '<p class="muted empty-hint">No suggestions yet — they appear here as students send them.</p>'}</div></section><section class="captured-requirements" data-suggestions-drop="true"><h2>Captured suggestions${capturedCount}</h2>${capturedBody}</section></div>`);
+  slideShell(slide, `<div class="curation-layout suggestion-capture"><section class="incoming-col"><h2>Incoming suggestions${incomingCount}</h2>${prompt}<div class="idea-pool requirements-idea-pool">${incoming || '<p class="muted empty-hint">No suggestions yet — they appear here as students send them.</p>'}</div></section><section class="captured-requirements" data-suggestions-drop="true"><h2>Captured suggestions${capturedCount}</h2>${capturedBody}</section></div>`);
   document.querySelectorAll("[data-capture-suggestion]").forEach((button) => (button.onclick = () => captureSuggestionResponse(slide.id, button.dataset.captureSuggestion)));
   document.querySelectorAll("[data-remove-suggestion]").forEach((button) => (button.onclick = () => {
     const next = captured.filter((_, index) => index !== Number(button.dataset.removeSuggestion));
@@ -935,8 +1086,9 @@ function renderProcessSlide(slide) {
   const availableProcessResponses = responses.filter((r) => !usedResponseIds.has(r.id));
   const ideas = availableProcessResponses.map((r) => `<article class="idea-card" draggable="true" data-response="${r.id}"><strong>${r.votes || 0} votes</strong><p>${esc(r.payload?.text || "")}</p>${stages.map((stage, index) => `<button class="btn secondary" data-stage="${index}" data-response="${r.id}">${esc(stage.title)}</button>`).join("")}</article>`).join("");
   const emptyIdeas = responses.length ? "All suggestions have been placed." : "Waiting for process-stage ideas...";
+  const prompt = slide.body ? `<p class="curation-prompt">${esc(slide.body)}</p>` : "";
   const board = stages.map((stage, index) => `<section class="stage drop-zone" data-stage-drop="${index}"><h3>${esc(stage.title)}</h3>${(stage.items || []).map((item) => `<p>${esc(item.text || item)}</p>`).join("")}</section>`).join("");
-  slideShell(slide, `<div class="curation-layout"><section><h2>Stage suggestions</h2><div class="idea-pool">${ideas || `<p class="muted">${emptyIdeas}</p>`}</div></section><section><h2>Process stage board</h2><div class="process-stage-board">${board}</div></section></div>`);
+  slideShell(slide, `<div class="curation-layout"><section><h2>Stage suggestions</h2>${prompt}<div class="idea-pool">${ideas || `<p class="muted">${emptyIdeas}</p>`}</div></section><section><h2>Process stage board</h2><div class="process-stage-board">${board}</div></section></div>`);
   document.querySelectorAll("[data-stage]").forEach((button) => (button.onclick = () => {
     addProcessItemToStage(slide.id, Number(button.dataset.stage), button.dataset.response);
   }));
@@ -986,7 +1138,7 @@ function renderGrid() {
   detail = null;
   document.querySelector(".result-detail-overlay")?.remove();
   app.innerHTML = `<div class="podium-shell"><header class="podium-header"><div class="podium-title">${brandMark()}<h1>Prompt Playground Podium</h1><p>${sessions.length} participants live</p></div><div class="podium-actions"><span class="badge">Scenario pool: ${scenarios.length}</span><button class="btn secondary" id="slides">Slides</button><button class="btn secondary" id="reset">Reset</button></div></header>${summaryStrip()}<div class="sortbar"><button class="btn ${sortMode === "leaderboard" ? "primary" : "secondary"}" data-sort="leaderboard">Leaderboard</button><button class="btn ${sortMode === "improved" ? "primary" : "secondary"}" data-sort="improved">Most improved</button></div><section class="grid">${sortedSessions().map(card).join("")}</section></div>`;
-  document.querySelectorAll(".card").forEach((c) => (c.onclick = () => openDetail(c.dataset.id)));
+  bindSessionCards();
   document.querySelectorAll("[data-sort]").forEach((b) => (b.onclick = () => {
     sortMode = b.dataset.sort;
     renderGrid();
@@ -1013,7 +1165,19 @@ function card(s) {
   const hasScore = (s.trend || []).length > 0;
   const latest = hasScore ? `${s.latest_captured}/${s.objectives_total || 5}` : "no runs yet";
   const bestRubric = hasScore ? `${s.best_rubric}/20` : "";
-  return `<article class="card ${hot}" data-id="${s.id}"><h2>${esc(s.display_name)}</h2><p><span class="badge">v${s.latest_version_number || "new"}</span> ${s.run_count} runs</p><div class="card-score ${scoreClass(s.latest_captured)}"><strong>${latest}</strong>${bestRubric ? `<span>${bestRubric}</span>` : ""}</div>${progressionStrip(s.trend, s.objectives_total)}<p class="muted">${ago(s.last_active_at)}</p></article>`;
+  return `<article class="card ${hot}" data-id="${s.id}" role="button" tabindex="0" aria-label="Open ${esc(s.display_name)} result"><h2>${esc(s.display_name)}</h2><p><span class="badge">v${s.latest_version_number || "new"}</span> ${s.run_count} runs</p><div class="card-score ${scoreClass(s.latest_captured)}"><strong>${latest}</strong>${bestRubric ? `<span>${bestRubric}</span>` : ""}</div>${progressionStrip(s.trend, s.objectives_total)}<p class="muted">${ago(s.last_active_at)}</p></article>`;
+}
+
+function bindSessionCards() {
+  document.querySelectorAll(".card[data-id]").forEach((cardElement) => {
+    const open = () => openDetail(cardElement.dataset.id);
+    cardElement.onclick = open;
+    cardElement.onkeydown = (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      open();
+    };
+  });
 }
 
 async function openDetail(id) {
@@ -1033,7 +1197,7 @@ function renderDetail(runId) {
   const transcript = run?.transcript || [];
   const scrollState = runId ? null : captureScrollState([".result-detail-overlay .pane"]);
   document.querySelector(".result-detail-overlay")?.remove();
-  document.body.insertAdjacentHTML("beforeend", `<aside class="result-detail-overlay" role="dialog" aria-modal="true" aria-label="Participant result"><div class="podium-shell detail-shell"><header class="podium-header detail-header"><button class="btn secondary" id="close-result-detail">Back to slide</button>${progressionHeader(d.run_history)}</header><div class="detail"><section class="pane"><h2>Instruction <span class="badge">v${run?.version_number || d.latest_instruction?.version_number || "new"}</span></h2><div class="instruction">${esc(instruction)}</div><div class="history">${d.run_history.map((r) => `<button class="btn secondary ${run?.id === r.id ? "selected" : ""}" data-run="${r.id}">v${r.version_number} ${scoreText(r)}</button>`).join("")}</div></section><section class="pane"><h2>Conversation</h2><div class="chat">${chat(transcript)}</div>${scorePanel(run?.score)}</section></div></div></aside>`);
+  document.body.insertAdjacentHTML("beforeend", `<aside class="result-detail-overlay" role="dialog" aria-modal="true" aria-label="Participant result"><div class="podium-shell detail-shell"><header class="podium-header detail-header"><button class="btn secondary" id="close-result-detail">Back to slide</button>${progressionHeader(d.run_history)}</header><div class="detail"><section class="pane instruction-pane"><h2>Instruction <span class="badge">v${run?.version_number || d.latest_instruction?.version_number || "new"}</span></h2><div class="instruction">${esc(instruction)}</div><div class="history">${d.run_history.map((r) => `<button class="btn secondary ${run?.id === r.id ? "selected" : ""}" data-run="${r.id}">v${r.version_number} ${scoreText(r)}</button>`).join("")}</div></section><section class="pane conversation-pane"><h2>Conversation</h2><div class="chat">${chat(transcript)}</div></section><section class="pane detail-score-pane"><h2>Score and coaching</h2>${scorePanel(run?.score)}</section></div></div></aside>`);
   document.querySelector("#close-result-detail").onclick = closeDetail;
   document.querySelectorAll("[data-run]").forEach((b) => (b.onclick = () => renderDetail(b.dataset.run)));
   restoreScrollState(scrollState);
@@ -1099,6 +1263,16 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && detail) {
     event.preventDefault();
     closeDetail();
+    return;
+  }
+  if (event.key === "Escape" && document.querySelector(".edit-slide-panel")) {
+    event.preventDefault();
+    closeSlideEditor();
+    return;
+  }
+  if (event.key === "Escape" && document.querySelector(".slide-list-panel")) {
+    event.preventDefault();
+    closeSlideList();
     return;
   }
   const target = event.target;

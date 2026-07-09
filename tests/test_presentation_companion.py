@@ -176,6 +176,52 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn("grid-template-columns:minmax(0,1.08fr) minmax(320px,.92fr)", style)
         self.assertIn(".standard-slide.no-bullets .slide-image-frame", style)
 
+    def test_slide_editor_is_template_aware_and_previews_both_surfaces(self):
+        source = (ROOT / "static" / "podium.js").read_text()
+        style = (ROOT / "static" / "style.css").read_text()
+
+        self.assertIn("TEMPLATE_EDITOR_FIELDS", source)
+        self.assertIn('data-editor-field="body"', source)
+        self.assertIn('data-editor-field="bullets"', source)
+        self.assertIn('data-editor-field="phonePrompt"', source)
+        self.assertIn("function syncEditorFields()", source)
+        self.assertIn("function updateSlideEditorPreview()", source)
+        self.assertIn("function previewTemplateHint(template)", source)
+        self.assertIn("editor-slide-preview", source)
+        self.assertIn("editor-phone-preview", source)
+        self.assertIn("preview-slide-image", source)
+        self.assertIn("editor-fit-warning", source)
+        self.assertIn("Discard unsaved slide changes?", source)
+        self.assertIn(".edit-slide-actions{position:sticky", style)
+        self.assertIn(".slide-editor-preview", style)
+
+    def test_slide_planning_values_are_normalised_and_labelled(self):
+        source = (ROOT / "static" / "podium.js").read_text()
+        style = (ROOT / "static" / "style.css").read_text()
+
+        self.assertIn("function normaliseSlidePlanning(slide)", source)
+        self.assertIn("SLIDE_DURATIONS.reduce", source)
+        self.assertIn("slides.map(normaliseSlidePlanning)", source)
+        self.assertIn('assignee: SLIDE_ASSIGNEES[0]', source)
+        self.assertIn('durationSeconds: 300', source)
+        self.assertIn('>Owner</span><span>Time</span><span>Slide</span>', source)
+        self.assertIn("deck-save-status", source)
+        self.assertIn('event.altKey', source)
+        self.assertIn('event.key !== "ArrowUp"', source)
+        self.assertIn(".slide-list-columns", style)
+        self.assertNotIn("renderSlideListLegacy", source)
+        self.assertNotIn("quick-nav-arrow", source)
+
+    def test_capture_slide_body_copy_reaches_podium_and_phone(self):
+        podium = (ROOT / "static" / "podium.js").read_text()
+        phone = (ROOT / "static" / "app.js").read_text()
+        style = (ROOT / "static" / "style.css").read_text()
+
+        self.assertGreaterEqual(podium.count('class="curation-prompt"'), 3)
+        self.assertIn('slide?.body || "What should the bot collect, avoid, or explain?"', phone)
+        self.assertIn('slide?.body || "Suggest a stage, or upvote one that looks useful."', phone)
+        self.assertIn(".curation-prompt", style)
+
     def test_slide_images_are_stored_separately_from_slide_json(self):
         main_source = (ROOT / "app" / "main.py").read_text()
         db_source = (ROOT / "app" / "db.py").read_text()

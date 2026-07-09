@@ -20,7 +20,7 @@ const PRESENTATION_SLIDES = [
     participantMode: "passive",
     body: "Tools and better ways of working that help legal work happen more clearly, safely, and efficiently.",
     bullets: ["Forms and workflows", "Document tools", "Automation and AI", "Dashboards and client portals"],
-    durationSeconds: 420,
+    durationSeconds: 300,
   },
   {
     id: "legal-engineering",
@@ -31,7 +31,7 @@ const PRESENTATION_SLIDES = [
     participantMode: "passive",
     body: "Legal engineers turn messy work into clear steps, useful tools, and testable systems.",
     bullets: ["Understand the work", "Map the process", "Build or configure tools", "Test and improve"],
-    durationSeconds: 360,
+    durationSeconds: 300,
   },
   {
     id: "skills-careers",
@@ -42,7 +42,7 @@ const PRESENTATION_SLIDES = [
     participantMode: "passive",
     body: "Legal technology needs different strengths.",
     bullets: ["Curiosity", "Clear communication", "Process thinking", "Careful use of AI", "Teamwork"],
-    durationSeconds: 360,
+    durationSeconds: 300,
   },
   {
     id: "careers-map",
@@ -64,7 +64,7 @@ const PRESENTATION_SLIDES = [
     participantMode: "passive",
     body: "You are going to train a family-team enquiry chatbot.",
     bullets: ["Collect useful information", "Be kind and clear", "Avoid legal advice", "Help a human lawyer know what to do next"],
-    durationSeconds: 180,
+    durationSeconds: 300,
   },
   {
     id: "baseline-build",
@@ -74,7 +74,7 @@ const PRESENTATION_SLIDES = [
     podiumType: "activity",
     participantMode: "bot",
     body: "Write a first version using only the general brief.",
-    durationSeconds: 720,
+    durationSeconds: 900,
   },
   {
     id: "baseline-results",
@@ -84,7 +84,7 @@ const PRESENTATION_SLIDES = [
     podiumType: "live",
     participantMode: "results",
     body: "Look at what the first attempt did well and what it missed.",
-    durationSeconds: 480,
+    durationSeconds: 600,
   },
   {
     id: "requirements-gathering",
@@ -132,7 +132,7 @@ const PRESENTATION_SLIDES = [
     podiumType: "interactive",
     participantMode: "process",
     body: "Suggest or upvote stages in the intake process.",
-    durationSeconds: 360,
+    durationSeconds: 300,
     interaction: {
       maxLength: 100,
       placeholder: "Suggest a stage in matter intake.",
@@ -147,7 +147,7 @@ const PRESENTATION_SLIDES = [
     participantMode: "passive",
     body: "Connect the transcript back to the intake process.",
     bullets: ["Client message", "Bot question", "Fact captured", "Human next step"],
-    durationSeconds: 240,
+    durationSeconds: 300,
   },
   {
     id: "debrief",
@@ -157,7 +157,7 @@ const PRESENTATION_SLIDES = [
     podiumType: "wrap",
     participantMode: "passive",
     body: "You tested, gathered requirements, improved a tool, and mapped the process behind it.",
-    durationSeconds: 240,
+    durationSeconds: 300,
   },
   {
     id: "qna-review",
@@ -167,7 +167,7 @@ const PRESENTATION_SLIDES = [
     podiumType: "interactive",
     participantMode: "qna",
     body: "Review questions from the room and tick off anything answered.",
-    durationSeconds: 240,
+    durationSeconds: 300,
   },
   {
     id: "careers-wrap",
@@ -177,7 +177,7 @@ const PRESENTATION_SLIDES = [
     podiumType: "wrap",
     participantMode: "qna",
     body: "Legal technology needs people who understand problems, communicate clearly, and improve how work gets done.",
-    durationSeconds: 120,
+    durationSeconds: 300,
   },
 ];
 

@@ -47,7 +47,7 @@ class PodiumProgressionTests(unittest.TestCase):
         self.assertIn(".podium-shell", source)
         self.assertIn("max-width:1760px", source)
         self.assertIn("grid-template-columns:repeat(auto-fit,minmax(300px,1fr))", source)
-        self.assertIn("grid-template-columns:minmax(360px,.9fr) minmax(560px,1.1fr)", source)
+        self.assertIn("grid-template-columns:minmax(280px,.78fr) minmax(360px,1fr) minmax(300px,.84fr)", source)
         self.assertIn("@media(max-width:1100px)", source)
         self.assertIn("@media(min-width:1500px)", source)
 
@@ -118,3 +118,18 @@ class PodiumProgressionTests(unittest.TestCase):
         self.assertIn("close-result-detail", script)
         self.assertIn('event.key === "Escape" && detail', script)
         self.assertIn("nextPresentation.active_slide_id !== presentationState.active_slide_id", script)
+
+    def test_projected_results_are_paginated_and_detail_has_dedicated_score_pane(self):
+        script = (ROOT / "static" / "podium.js").read_text()
+        style = (ROOT / "static" / "style.css").read_text()
+
+        self.assertIn("function resultPageSize()", script)
+        self.assertIn("function pagedResultSessions()", script)
+        self.assertIn("function resultsPager(page)", script)
+        self.assertIn("page.rows.map(card)", script)
+        self.assertIn("resultsPage = 0", script)
+        self.assertIn("detail-score-pane", script)
+        self.assertIn("Score and coaching", script)
+        self.assertIn(".results-grid", style)
+        self.assertIn("grid-template-rows:repeat(2,minmax(0,1fr))", style)
+        self.assertIn(".bot-results-view{display:flex", style)
