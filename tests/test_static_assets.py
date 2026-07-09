@@ -11,15 +11,15 @@ class StaticAssetTests(unittest.TestCase):
 
         self.assertIn('viewport-fit=cover', html)
         self.assertIn('/static/style.css?v=presentation-27', html)
-        self.assertIn('/static/presentation.js?v=presentation-18', html)
-        self.assertIn('/static/app.js?v=presentation-30', html)
+        self.assertIn('/static/presentation.js?v=presentation-19', html)
+        self.assertIn('/static/app.js?v=presentation-31', html)
 
     def test_podium_cache_busts_assets(self):
         html = (ROOT / "static" / "podium.html").read_text()
 
         self.assertIn('/static/style.css?v=presentation-25', html)
-        self.assertIn('/static/presentation.js?v=presentation-20', html)
-        self.assertIn('/static/podium.js?v=presentation-30', html)
+        self.assertIn('/static/presentation.js?v=presentation-21', html)
+        self.assertIn('/static/podium.js?v=presentation-31', html)
 
     def test_participant_stream_loop_yields_to_browser_paint(self):
         script = (ROOT / "static" / "app.js").read_text()
@@ -72,9 +72,12 @@ class StaticAssetTests(unittest.TestCase):
         self.assertIn("function saveResponseDraft(type)", script)
         self.assertIn("function clearResponseDraft(type)", script)
         self.assertIn("${esc(responseDraft(\"requirements\"))}", script)
+        self.assertIn("${esc(responseDraft(\"suggestion\"))}", script)
         self.assertIn("${esc(responseDraft(\"process\"))}", script)
         self.assertIn('$("#response").oninput = () => saveResponseDraft("requirements")', script)
+        self.assertIn('$("#response").oninput = () => saveResponseDraft("suggestion")', script)
         self.assertIn('$("#response").oninput = () => saveResponseDraft("process")', script)
+        self.assertIn('mode === "requirements" || mode === "suggestion" || mode === "process"', script)
 
     def test_profile_screen_introduces_workshop_outcomes(self):
         script = (ROOT / "static" / "app.js").read_text()

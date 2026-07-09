@@ -23,11 +23,12 @@ const SLIDE_TEMPLATE_OPTIONS = [
   { value: "interaction", label: "Assistant Builder slide", participantMode: "bot", podiumType: "activity", interaction: { placeholder: "Open the Assistant Builder on your phone." } },
   { value: "bot-results", label: "Bot results slide", participantMode: "results", podiumType: "live" },
   { value: "qna-review", label: "Q&A review slide", participantMode: "qna", podiumType: "interactive" },
+  { value: "suggestion-capture", label: "Suggestion capture", participantMode: "suggestion", podiumType: "interactive", interaction: { maxLength: 160, placeholder: "Share an idea for the discussion." } },
   { value: "requirements-capture", label: "Requirements capture", participantMode: "requirements", podiumType: "interactive", interaction: { maxLength: 160, placeholder: "What should the intake bot collect, avoid, or explain?" } },
   { value: "workflow-capture", label: "Workflow capture", participantMode: "process", podiumType: "interactive", interaction: { maxLength: 100, placeholder: "What stage should happen in a good intake process?" } },
 ];
 
-const PARTICIPANT_MODE_OPTIONS = ["passive", "bot", "results", "qna", "requirements", "process"];
+const PARTICIPANT_MODE_OPTIONS = ["passive", "bot", "results", "qna", "suggestion", "requirements", "process"];
 
 const api = (u, o = {}) =>
   fetch(u + (u.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(key), {
@@ -140,7 +141,7 @@ function brandMark() {
 
 async function renderPresentation() {
   const slide = currentSlide();
-  if (slide.template === "requirements-capture" || slide.template === "workflow-capture") {
+  if (slide.template === "requirements-capture" || slide.template === "suggestion-capture" || slide.template === "workflow-capture") {
     await loadResponses(slide.id);
   }
   if (slide.template === "qna-review") {
@@ -154,6 +155,7 @@ function renderByTemplate(slide) {
     standard: renderStandardSlide,
     interaction: renderInteractionSlide,
     "qna-review": renderQnaReviewSlide,
+    "suggestion-capture": renderSuggestionSlide,
     "requirements-capture": renderRequirementsSlide,
     "workflow-capture": renderProcessSlide,
     "bot-results": renderLiveSlide,
@@ -602,6 +604,56 @@ function captureRequirementResponse(slideId, responseId) {
   if (!item) return;
   const next = [...captured, { response_id: item.id, text: item.payload?.text || "" }];
   saveArtifact(slideId, "captured_requirements", { items: next });
+}
+
+function capturedSuggestions() {
+  return artifacts.find((item) => item.artifact_type === "captured_suggestions")?.payload?.items || [];
+}
+
+function capturedSuggestionResponseIds(captured) {
+  return new Set(captured.map((item) => item.response_id).filter(Boolean));
+}
+
+function renderSuggestionSlide(slide) {
+  const captured = capturedSuggestions();
+  const capturedIds = capturedSuggestionResponseIds(captured);
+  const availableResponses = responses.filter((r) => !capturedIds.has(r.id));
+  const incoming = availableResponses.map((r) => `<article class="idea-card requirements-idea-card" draggable="true" data-response="${r.id}"><p>${esc(r.payload?.text || "")}</p><button class="btn secondary" data-capture-suggestion="${r.id}">Capture</button></article>`).join("");
+  const capturedHtml = captured.map((item, index) => `<li><span>${esc(item.text || item)}</span><button class="req-remove" data-remove-suggestion="${index}" aria-label="Remove suggestion">Remove</button></li>`).join("");
+  const incomingCount = availableResponses.length ? ` <span class="count-pill">${availableResponses.length}</span>` : "";
+  const capturedCount = captured.length ? ` <span class="count-pill">${captured.length}</span>` : "";
+  const capturedBody = captured.length
+    ? `<ol id="captured-suggestion-list" class="captured-list">${capturedHtml}</ol><p class="muted curation-foot">Captured here for discussion only. These do not change the Assistant Builder brief.</p>`
+    : `<p class="muted empty-hint">Nothing captured yet. Drag an idea across, or hit Capture to build a discussion list.</p>`;
+  slideShell(slide, `<div class="curation-layout suggestion-capture"><section class="incoming-col"><h2>Incoming suggestions${incomingCount}</h2><div class="idea-pool requirements-idea-pool">${incoming || '<p class="muted empty-hint">No suggestions yet — they appear here as students send them.</p>'}</div></section><section class="captured-requirements" data-suggestions-drop="true"><h2>Captured suggestions${capturedCount}</h2>${capturedBody}</section></div>`);
+  document.querySelectorAll("[data-capture-suggestion]").forEach((button) => (button.onclick = () => captureSuggestionResponse(slide.id, button.dataset.captureSuggestion)));
+  document.querySelectorAll("[data-remove-suggestion]").forEach((button) => (button.onclick = () => {
+    const next = captured.filter((_, index) => index !== Number(button.dataset.removeSuggestion));
+    saveArtifact(slide.id, "captured_suggestions", { items: next });
+  }));
+  bindDraggableIdeas();
+  const dropZone = document.querySelector("[data-suggestions-drop]");
+  if (dropZone) {
+    dropZone.ondragover = allowDrop;
+    dropZone.ondragenter = () => dropZone.classList.add("drag-over");
+    dropZone.ondragleave = (event) => {
+      if (!dropZone.contains(event.relatedTarget)) dropZone.classList.remove("drag-over");
+    };
+    dropZone.ondrop = (event) => {
+      event.preventDefault();
+      dropZone.classList.remove("drag-over");
+      captureSuggestionResponse(slide.id, event.dataTransfer.getData("text/plain"));
+    };
+  }
+}
+
+function captureSuggestionResponse(slideId, responseId) {
+  const captured = capturedSuggestions();
+  if (capturedSuggestionResponseIds(captured).has(responseId)) return;
+  const item = responses.find((r) => r.id === responseId);
+  if (!item) return;
+  const next = [...captured, { response_id: item.id, text: item.payload?.text || "" }];
+  saveArtifact(slideId, "captured_suggestions", { items: next });
 }
 
 function processMap() {

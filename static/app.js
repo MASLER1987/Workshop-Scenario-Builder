@@ -83,7 +83,7 @@ function preserveLiveInputs() {
   const response = $("#response");
   if (response) {
     const mode = state.presentation?.participant_mode;
-    if (mode === "requirements" || mode === "process") saveResponseDraft(mode);
+    if (mode === "requirements" || mode === "suggestion" || mode === "process") saveResponseDraft(mode);
   }
 }
 
@@ -285,6 +285,8 @@ function renderCompanion(mode) {
   const slide = activeSlide();
   if (mode === "requirements") {
     renderRequirements(slide);
+  } else if (mode === "suggestion") {
+    renderSuggestion(slide);
   } else if (mode === "process") {
     renderProcess(slide);
   } else if (mode === "qna") {
@@ -334,6 +336,12 @@ function renderRequirements(slide) {
   $("#send-response").onclick = () => submitResponse("requirements");
 }
 
+function renderSuggestion(slide) {
+  app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Suggestions")}${activeSlideBanner(slide, "Interactive now")}<div class="companion input-companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "Share an idea")}</h1><p>${esc(slide?.body || "Send a suggestion for the presenters.")}</p><textarea id="response" maxlength="160" class="short phone-textarea compact-textarea" placeholder="${esc(state.presentation?.interaction?.placeholder || "Your suggestion...")}">${esc(responseDraft("suggestion"))}</textarea>${noticeHtml()}<div class="phone-action"><button class="btn primary" id="send-response">Send suggestion</button></div></div></section>`;
+  $("#response").oninput = () => saveResponseDraft("suggestion");
+  $("#send-response").onclick = () => submitResponse("suggestion");
+}
+
 function renderProcess(slide) {
   const suggestions = (state.responses || []).map((item) => `<li><button class="vote" data-vote="${item.id}">+${item.votes || 0}</button><span>${esc(item.payload?.text || "")}</span></li>`).join("");
   app.innerHTML = `<section class="phone-screen companion-view">${phoneHead("Process map")}${activeSlideBanner(slide, "Interactive now")}<div class="companion input-companion"><p class="eyebrow">Interactive slide</p><h1>${esc(slide?.title || "Matter intake stages")}</h1><p>Suggest a stage, or upvote one that looks useful.</p><textarea id="response" maxlength="100" class="short phone-textarea compact-textarea" placeholder="${esc(state.presentation?.interaction?.placeholder || "Suggest a stage...")}">${esc(responseDraft("process"))}</textarea>${noticeHtml()}<div class="phone-action"><button class="btn primary" id="send-response">Send stage</button></div><ul class="phone-list">${suggestions}</ul></div></section>`;
@@ -353,7 +361,7 @@ async function submitResponse(type) {
       payload: { text },
     }),
   });
-  state.notice = type === "process" ? "Stage sent." : "Idea sent.";
+  state.notice = type === "process" ? "Stage sent." : type === "suggestion" ? "Suggestion sent." : "Idea sent.";
   state.noticeKind = "success";
   clearResponseDraft(type);
   await loadPresentationState();

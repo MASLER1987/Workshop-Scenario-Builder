@@ -38,6 +38,7 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn('template: "standard"', source)
         self.assertIn('template: "interaction"', source)
         self.assertIn('template: "qna-review"', source)
+        self.assertIn('template: "suggestion-capture"', source)
         self.assertIn('template: "requirements-capture"', source)
         self.assertIn('template: "workflow-capture"', source)
         self.assertIn('template: "bot-results"', source)
@@ -50,6 +51,7 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn('participantMode: "passive"', source)
         self.assertIn('participantMode: "bot"', source)
         self.assertIn('participantMode: "requirements"', source)
+        self.assertIn('participantMode: "suggestion"', source)
         self.assertIn('participantMode: "process"', source)
 
     def test_participant_app_renders_companion_modes(self):
@@ -59,6 +61,7 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn("renderCompanion", source)
         self.assertIn("renderQna", source)
         self.assertIn("renderRequirements", source)
+        self.assertIn("renderSuggestion", source)
         self.assertIn("renderProcess", source)
         self.assertIn("captured_requirements", source)
         self.assertIn("submitResponse", source)
@@ -86,6 +89,8 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn("questionSlideLabel", source)
         self.assertIn("question-slide-pill", source)
         self.assertIn("renderRequirementsSlide", source)
+        self.assertIn("renderSuggestionSlide", source)
+        self.assertIn("captured_suggestions", source)
         self.assertIn("renderProcessSlide", source)
         self.assertIn("renderLiveSlide", source)
         self.assertIn("archiveQuestion", source)

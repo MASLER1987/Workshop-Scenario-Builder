@@ -101,6 +101,20 @@ const PRESENTATION_SLIDES = [
     },
   },
   {
+    id: "general-suggestions",
+    title: "Collect Ideas From The Room",
+    section: "workshop",
+    template: "suggestion-capture",
+    podiumType: "interactive",
+    participantMode: "suggestion",
+    body: "Ask the room for ideas and curate the useful ones on screen.",
+    durationSeconds: 300,
+    interaction: {
+      maxLength: 160,
+      placeholder: "Share an idea for the discussion.",
+    },
+  },
+  {
     id: "requirements-build",
     title: "Improve With Requirements",
     section: "workshop",
