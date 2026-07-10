@@ -132,7 +132,7 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn("SLIDE_ASSIGNEES", source)
         self.assertIn('["JS", "MC", "MH", "EW"]', source)
         self.assertIn("SLIDE_DURATIONS", source)
-        self.assertIn("[5, 10, 15]", source)
+        self.assertIn("[2, 5, 10, 15]", source)
         self.assertIn("slidePlanningControls", source)
         self.assertIn("slide-assignee-select", source)
         self.assertIn("slide-duration-select", source)
@@ -201,6 +201,7 @@ class PresentationCompanionTests(unittest.TestCase):
 
         self.assertIn("function normaliseSlidePlanning(slide)", source)
         self.assertIn("SLIDE_DURATIONS.reduce", source)
+        self.assertIn(": 5;", source)
         self.assertIn("slides.map(normaliseSlidePlanning)", source)
         self.assertIn('assignee: SLIDE_ASSIGNEES[0]', source)
         self.assertIn('durationSeconds: 300', source)

@@ -26,7 +26,7 @@ let pendingSlideImagePreviewUrl = "";
 let slideEditorDirty = false;
 
 const SLIDE_ASSIGNEES = ["JS", "MC", "MH", "EW"];
-const SLIDE_DURATIONS = [5, 10, 15];
+const SLIDE_DURATIONS = [2, 5, 10, 15];
 const SLIDE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SLIDE_IMAGE_BYTES = 5 * 1024 * 1024;
 const TEMPLATE_EDITOR_FIELDS = {
@@ -113,9 +113,11 @@ async function loadSlideDeck() {
 
 function normaliseSlidePlanning(slide) {
   const minutes = Math.max(0, Number(slide.durationSeconds) / 60 || 0);
-  const duration = minutes > 10
-    ? 15
-    : SLIDE_DURATIONS.reduce((nearest, value) => Math.abs(value - minutes) < Math.abs(nearest - minutes) ? value : nearest, SLIDE_DURATIONS[0]);
+  const duration = minutes
+    ? minutes > 10
+      ? 15
+      : SLIDE_DURATIONS.reduce((nearest, value) => Math.abs(value - minutes) < Math.abs(nearest - minutes) ? value : nearest, SLIDE_DURATIONS[0])
+    : 5;
   return {
     ...slide,
     assignee: SLIDE_ASSIGNEES.includes(slide.assignee) ? slide.assignee : SLIDE_ASSIGNEES[0],
