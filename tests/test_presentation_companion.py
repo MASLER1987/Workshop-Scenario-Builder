@@ -190,10 +190,44 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn("editor-slide-preview", source)
         self.assertIn("editor-phone-preview", source)
         self.assertIn("preview-slide-image", source)
+        self.assertIn("standardSlideDensity(previewSlide)", source)
+        self.assertIn("projectorDensityLabel(density)", source)
+        self.assertIn("template-preview-", source)
+        self.assertIn("preview-more", source)
         self.assertIn("editor-fit-warning", source)
         self.assertIn("Discard unsaved slide changes?", source)
         self.assertIn(".edit-slide-actions{position:sticky", style)
         self.assertIn(".slide-editor-preview", style)
+        self.assertIn(".editor-slide-preview.density-spacious", style)
+        self.assertIn("aspect-ratio:16/9", style)
+
+    def test_standard_slides_choose_projector_density_from_content(self):
+        source = (ROOT / "static" / "podium.js").read_text()
+        style = (ROOT / "static" / "style.css").read_text()
+
+        self.assertIn("function standardSlideDensity(slide)", source)
+        self.assertIn('return "spacious"', source)
+        self.assertIn('return "balanced"', source)
+        self.assertIn('return "compact"', source)
+        self.assertIn('density-${density}', source)
+        self.assertIn("--projector-title-size", style)
+        self.assertIn("--projector-body-size", style)
+        self.assertIn("--projector-list-size", style)
+        self.assertIn(".standard-slide.density-spacious", style)
+        self.assertIn(".standard-slide.density-balanced", style)
+        self.assertIn(".standard-slide.density-compact", style)
+
+    def test_interactive_templates_have_projector_specific_type_scales(self):
+        style = (ROOT / "static" / "style.css").read_text()
+
+        self.assertIn(".template-requirements-capture,.template-suggestion-capture,.template-workflow-capture", style)
+        self.assertIn(".template-qna-review", style)
+        self.assertIn(".curation-layout h2", style)
+        self.assertIn(".question-card p", style)
+        self.assertIn(".bot-results-view .card h2", style)
+        self.assertIn("grid-auto-rows:max-content", style)
+        self.assertIn(".curation-layout>section:last-child", style)
+        self.assertIn("padding-right:clamp(120px,9vw,140px)", style)
 
     def test_slide_planning_values_are_normalised_and_labelled(self):
         source = (ROOT / "static" / "podium.js").read_text()

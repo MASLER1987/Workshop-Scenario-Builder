@@ -683,17 +683,35 @@ function updateSlideEditorPreview() {
   const imageNode = document.querySelector("#preview-slide-image");
   const modeNode = document.querySelector("#preview-phone-mode");
   const promptNode = document.querySelector("#preview-phone-prompt");
+  const previewNode = document.querySelector(".editor-slide-preview");
+  const previewSlide = { title, body, bullets, image: template === "standard" ? pendingSlideImage : null };
+  const density = template === "standard" ? standardSlideDensity(previewSlide) : "";
+  if (previewNode) {
+    previewNode.className = `editor-slide-preview template-preview-${template}${density ? ` density-${density}` : ""}`;
+  }
   if (titleNode) titleNode.textContent = title;
-  if (labelNode) labelNode.textContent = slideTemplateLabel(template);
+  if (labelNode) labelNode.textContent = `${slideTemplateLabel(template)}${density ? ` - ${projectorDensityLabel(density)}` : ""}`;
   if (layoutNode) layoutNode.textContent = previewTemplateHint(template);
   if (bodyNode) bodyNode.textContent = body;
-  if (bulletsNode) bulletsNode.innerHTML = bullets.slice(0, 5).map((item) => `<li>${esc(item)}</li>`).join("");
+  if (bulletsNode) {
+    const visible = bullets.slice(0, 6).map((item) => `<li>${esc(item)}</li>`).join("");
+    const remainder = bullets.length > 6 ? `<li class="preview-more">+${bullets.length - 6} more</li>` : "";
+    bulletsNode.innerHTML = visible + remainder;
+  }
   if (imageNode) imageNode.innerHTML = template === "standard" && pendingSlideImage ? `<img src="${esc(slideImageSource(pendingSlideImage))}" alt="">` : "";
   if (modeNode) modeNode.textContent = PARTICIPANT_MODE_LABELS[mode] || mode;
   if (promptNode) promptNode.textContent = prompt;
   const warning = document.querySelector("#editor-fit-warning");
-  const mayOverflow = title.length > 85 || body.length > 320 || bullets.length > 5 || bullets.some((item) => item.length > 95);
-  if (warning) warning.textContent = mayOverflow ? "This content may not fit comfortably on a projected slide. Shorten the title, body, or list." : "";
+  const longestBullet = bullets.reduce((longest, item) => Math.max(longest, item.length), 0);
+  const mayOverflow = title.length > 100
+    || (template === "standard" && (body.length > 480 || bullets.length > 7 || longestBullet > 125))
+    || (template === "interaction" && (body.length > 360 || bullets.length > 5));
+  const compactMessage = template === "standard" && density === "compact"
+    ? "Using compact projector type. Consider splitting this content across two slides."
+    : "";
+  if (warning) warning.textContent = mayOverflow
+    ? "This content is likely to overflow when projected. Shorten it or split it across slides."
+    : compactMessage;
 }
 
 function previewTemplateHint(template) {
@@ -890,13 +908,36 @@ async function deleteSlide(slideId) {
   await activateSlide(selectedSlideIndex);
 }
 
+function standardSlideDensity(slide) {
+  const bullets = Array.isArray(slide.bullets) ? slide.bullets : [];
+  const bodyLength = String(slide.body || "").length;
+  const titleLength = String(slide.title || "").length;
+  const longestBullet = bullets.reduce((longest, item) => Math.max(longest, String(item).length), 0);
+  const hasImage = Boolean(normaliseSlideImage(slide.image));
+  const spaciousBulletLimit = hasImage ? 3 : 4;
+  const balancedBulletLimit = hasImage ? 5 : 6;
+  const spaciousBodyLimit = hasImage ? 160 : 220;
+  if (bullets.length <= spaciousBulletLimit && bodyLength <= spaciousBodyLimit && titleLength <= 80 && longestBullet <= 100) {
+    return "spacious";
+  }
+  if (bullets.length <= balancedBulletLimit && bodyLength <= 360 && titleLength <= 100 && longestBullet <= 125) {
+    return "balanced";
+  }
+  return "compact";
+}
+
+function projectorDensityLabel(density) {
+  return density.charAt(0).toUpperCase() + density.slice(1);
+}
+
 function renderStandardSlide(slide) {
   const bullets = (slide.bullets || []).map((item) => `<li>${esc(item)}</li>`).join("");
   const image = normaliseSlideImage(slide.image);
   const imageHtml = image ? `<figure class="slide-image-frame"><img src="${esc(slideImageSource(image))}" alt="${esc(image.name || "")}"></figure>` : "";
   const copy = `<div class="standard-slide-copy"><p>${esc(slide.body || "")}</p>${bullets ? `<ul>${bullets}</ul>` : ""}</div>`;
   const layoutClass = image ? ` has-image ${bullets ? "has-bullets" : "no-bullets"}` : "";
-  slideShell(slide, `<section class="presentation-card standard-slide${layoutClass}">${copy}${imageHtml}</section>`);
+  const density = standardSlideDensity(slide);
+  slideShell(slide, `<section class="presentation-card standard-slide density-${density}${layoutClass}">${copy}${imageHtml}</section>`);
 }
 
 function interactionPromptText(slide) {
@@ -930,7 +971,6 @@ function renderLiveSlide(slide) {
 
 function resultPageSize() {
   if (window.innerWidth >= 1500) return 8;
-  if (window.innerWidth >= 1100) return 6;
   return 4;
 }
 

@@ -124,6 +124,9 @@ class PodiumProgressionTests(unittest.TestCase):
         style = (ROOT / "static" / "style.css").read_text()
 
         self.assertIn("function resultPageSize()", script)
+        self.assertIn("if (window.innerWidth >= 1500) return 8;", script)
+        self.assertIn("return 4;", script)
+        self.assertNotIn("if (window.innerWidth >= 1100) return 6;", script)
         self.assertIn("function pagedResultSessions()", script)
         self.assertIn("function resultsPager(page)", script)
         self.assertIn("page.rows.map(card)", script)
