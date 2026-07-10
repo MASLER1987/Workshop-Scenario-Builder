@@ -229,6 +229,16 @@ class PresentationCompanionTests(unittest.TestCase):
         self.assertIn(".curation-layout>section:last-child", style)
         self.assertIn("padding-right:clamp(120px,9vw,140px)", style)
 
+    def test_presentation_mode_uses_a_full_bleed_vwv_rail(self):
+        source = (ROOT / "static" / "podium.js").read_text()
+        style = (ROOT / "static" / "style.css").read_text()
+
+        self.assertIn('app.classList.add("presentation-mode")', source)
+        self.assertIn('app.classList.remove("presentation-mode")', source)
+        self.assertIn(".podium.presentation-mode{padding:0", style)
+        self.assertIn(".podium.presentation-mode .presentation-shell{width:100%;max-width:none;height:100vh", style)
+        self.assertIn("width:clamp(16px,1.35vw,22px)", style)
+
     def test_slide_planning_values_are_normalised_and_labelled(self):
         source = (ROOT / "static" / "podium.js").read_text()
         style = (ROOT / "static" / "style.css").read_text()

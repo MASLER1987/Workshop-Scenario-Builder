@@ -282,6 +282,7 @@ function startSlideTimer() {
 }
 
 async function renderPresentation() {
+  app.classList.add("presentation-mode");
   const slide = currentSlide();
   if (slide.template === "requirements-capture" || slide.template === "suggestion-capture" || slide.template === "workflow-capture") {
     await loadResponses(slide.id);
@@ -1176,6 +1177,7 @@ function sortedSessions() {
 }
 
 function renderGrid() {
+  app.classList.remove("presentation-mode");
   stopSlideTimer();
   detail = null;
   document.querySelector(".result-detail-overlay")?.remove();
